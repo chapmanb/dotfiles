@@ -1,0 +1,8 @@
+tmux/plugins/tmux-continuum/
+tmux/plugins/tmux-copycat/
+tmux/plugins/tmux-pain-control/
+tmux/plugins/tmux-resurrect/
+tmux/plugins/tmux-sensible/
+tmux/plugins/tmux-sessionist/
+tmux/plugins/tmux-yank/
+tmux/resurrect
