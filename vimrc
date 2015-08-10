@@ -126,5 +126,5 @@ inoremap <DEL> <BACKSPACE>
 
 let base16colorspace=256
 set background=dark
-colorscheme base16-tomorrow
+colorscheme base16-ocean
 " vi:ts=4 sw=4 expandtab

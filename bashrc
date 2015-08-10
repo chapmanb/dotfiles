@@ -64,6 +64,9 @@ alias sacct_std='sacct -s r -s pd -X --format JobID,JobName,Partition,NNodes,All
 # http://geekanova.blogspot.co.uk/2012/11/ctrl-s-freezes-terminal.html
 [[ $- == *i* ]] && stty -ixon -ixoff
 
+# make less more friendly for non-text input files, see lesspipe(1)
+[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
+
 if [ -f ~/.dotfiles/shell/liquidprompt/liquidprompt ]; then
     source ~/.dotfiles/shell/liquidprompt/liquidprompt
 fi
@@ -77,7 +80,7 @@ if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
 fi
 
 ## highlighting
-BASE16_SHELL="$HOME/.dotfiles/shell/base16-shell/base16-tomorrow.dark.sh"
+BASE16_SHELL="$HOME/.dotfiles/shell/base16-shell/base16-ocean.dark.sh"
 [[ -s $BASE16_SHELL ]] && source $BASE16_SHELL
 
 # enable color support of ls and also add handy aliases

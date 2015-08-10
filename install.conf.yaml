@@ -17,6 +17,10 @@
     ~/.vim/autoload/pathogen.vim: 
        create: true
        path: vim/bundle/vim-pathogen/autoload/pathogen.vim
+    ~/.xmonad/xmonad.hs:
+       create: true
+       path: xmonad.hs
+    ~/.Xresources: Xresources
 
 - link: 
     ~/.emacs.d/private/brad: emacs_d_brad

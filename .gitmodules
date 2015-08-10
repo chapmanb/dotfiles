@@ -31,3 +31,6 @@
 [submodule "emacs_d_spacemacs"]
 	path = emacs_d_spacemacs
 	url = https://github.com/syl20bnr/spacemacs.git
+[submodule "shell/nottoomuch"]
+	path = shell/nottoomuch
+	url = https://github.com/domo141/nottoomuch.git
