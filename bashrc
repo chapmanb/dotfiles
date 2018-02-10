@@ -24,21 +24,20 @@ export PAGER=less
 export GIT_SSL_NO_VERIFY=true
 export DEBIAN_FRONTEND=noninteractive
 
-HISTCONTROL=ignoreboth
+export HISTCONTROL=ignoreboth
+export HISTCONTROL=erasedups
 shopt -s histappend
-HISTSIZE=50000
-HISTFILESIZE=50000
+export HISTSIZE=50000
+export HISTFILESIZE=50000
 shopt -s checkwinsize
 
 # bcbio
 unset JAVA_HOME
 if [ -d "$BCBIO" ]; then
     export PATH=$BCBIO/bin:$PATH
-    export LD_LIBRARY_PATH=$BCBIO/lib:$LD_LIBRARY_PATH
-    export PERL5LIB=$BCBIO/lib/perl5:${PERL5LIB}
-    alias bcbio_python="$BCBIO/share/bcbio_nextgen/anaconda/bin/python"
-    alias bcbio_conda="$BCBIO/share/bcbio_nextgen/anaconda/bin/conda"
-    alias bcbio_binstar="$BCBIO/share/bcbio_nextgen/anaconda/bin/binstar"
+    #export LD_LIBRARY_PATH=$BCBIO/lib:$LD_LIBRARY_PATH
+    #export PERL5LIB=$BCBIO/lib/perl5:${PERL5LIB}
+    alias bcbio_anaconda="$BCBIO/share/bcbio_nextgen/anaconda/bin/anaconda"
 fi
 
 # Custom aliases
@@ -78,6 +77,7 @@ fi
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
+source <(gopass completion bash)
 
 ## highlighting
 BASE16_SHELL="$HOME/.dotfiles/shell/base16-shell/base16-ocean.dark.sh"
@@ -91,3 +91,7 @@ if [ -x /usr/bin/dircolors ]; then
     alias fgrep='fgrep --color=auto'
     alias egrep='egrep --color=auto'
 fi
+
+# Nix
+#if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
+source <(awless completion bash)

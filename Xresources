@@ -11,12 +11,12 @@
 ! Uses resources form urxvt-perls on GitHub
 ! https://github.com/muennich/urxvt-perls/ 
 !URxvt.perl-ext-common: default,keyboard-select,url-select,clipboard
-URxvt.perl-ext-common: default,keyboard-select,url-select
-URxvt.keysym.M-o: perl:keyboard-select:activate
-URxvt.keysym.M-u: perl:url-select:select_next
-URxvt.url-select.launcher: firefox
-URxvt.url-select.underline: true
-URxvt.url-select.autocopy:  true
+#URxvt.perl-ext-common: default,keyboard-select,url-select
+#URxvt.keysym.M-o: perl:keyboard-select:activate
+#URxvt.keysym.M-u: perl:url-select:select_next
+#URxvt.url-select.launcher: firefox
+#URxvt.url-select.underline: true
+#URxvt.url-select.autocopy:  true
 !URxvt.clipboard.autocopy: true
 !URxvt.keysym.M-s: perl:keyboard-select:search
 !URxvt.keysym.M-p:   perl:clipboard:paste

@@ -17,6 +17,7 @@
     notmuch
     notmuch-address
     org2blog
+    snakemake-mode
     twittering-mode
     writegood-mode
     xclip
@@ -93,7 +94,7 @@
   (add-hook 'message-mode-hook '(lambda () (setq fill-column 78)) 'append)
   (setq mm-text-html-renderer 'w3m-standalone)
   (setq message-default-mail-headers "Cc: \n")
-  (setq message-auto-save-directory "~/Dropbox/mail/drafts")
+  (setq message-auto-save-directory "~/mail/drafts")
   (setq notmuch-address-command "~/.dotfiles/shell/nottoomuch/nottoomuch-addresses.sh")
   (notmuch-address-message-insinuate)
   (setq notmuch-hello-recent-searches-max 0)
@@ -147,7 +148,7 @@
   (defun brad-mail-quit ()
     (interactive)
     (offlineimap-quit)
-    (shell-command "notmuch dump > ~/Dropbox/mail/notmuch/tag-dump.txt")
+    (shell-command "notmuch dump > ~/mail/notmuch/tag-dump.txt")
     (notmuch-bury-or-kill-this-buffer)
     (if (get-buffer "*Notmuch errors*")
         (kill-buffer "*Notmuch errors*")))
@@ -174,6 +175,9 @@
            :url "https://smallchangebio.wordpress.com/xmlrpc.php"
            :username "bcbio")))
   (setq org2blog/wp-use-sourcecode-shortcode t))
+
+(defun brad/init-snakemake-mode ()
+  (require 'snakemake-mode))
 
 (defun brad/init-twittering-mode ()
   (require 'twittering-mode)

@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+shopt -s nullglob globstar
+
+function type_password {
+    pass show "$password" |
+        awk 'BEGIN{ORS=""} {print; exit}' |
+        xdotool type --clearmodifiers --file -
+}
+
+function get_credential {
+    rest=$(pass show "$password" | tail -n +2)
+    email=$(echo "$rest" | egrep -i '^email:.*' | awk '{print $2}')
+    username=$(echo "$rest" | egrep -i '^username:.*' | awk '{print $2}')
+    login=$(echo "$rest" | egrep -i '^login:.*' | awk '{print $2}')
+    if [ -z "$login" ]
+    then
+        if [ -n "$email" ]
+        then
+            credential=$email
+        elif [ -n "$username" ]
+        then
+            credential=$username
+        else
+            credential=$(echo $rest | tail -n 1)
+        fi
+    else
+        credential="${!login}"
+    fi
+    echo "$credential"
+}
+
+function type_credential {
+    credential="$(get_credential)"
+    xdotool type $credential
+}
+
+function type_credential_and_password {
+    type_credential
+    xdotool key Tab
+    type_password
+}
+
+function show_message {
+    local message="$1"
+    notify-send $name "$message"
+}
+
+function print_usage {
+    echo "$name [--type|--other|--lazy|--semi-lazy|--type-and-enter|--copy-login|--type-login|--double-type]"
+}
+
+name=ysnpassmenu
+prefix=${PASSWORD_STORE_DIR-~/.password-store}
+password_files=( "$prefix"/**/*.gpg )
+password_files=( "${password_files[@]#"$prefix"/}" )
+password_files=( "${password_files[@]%.gpg}" )
+
+if [[ $1 =~ --type|--other|--lazy|--type-and-enter|--copy-login|--type-login|--semi-lazy|--double-type ]]
+then
+    operation="$1"
+    shift
+elif [[ -z "$1" ]]
+then
+    operation=show
+else
+    print_usage
+    exit 1
+fi
+
+password=$(printf '%s\n' "${password_files[@]}" | dmenu "$@")
+
+[[ -n $password ]] || exit
+
+case $operation in
+    --type)
+        type_password
+        ;;
+    --type-and-enter)
+        type_password
+        xdotool key Return
+        ;;
+    --other)
+        menu_width=300
+        info=$(pass show "$password" | tail -n +2)
+        notify-send "$password" "$info"
+        ;;
+    --lazy)
+        type_credential_and_password
+        xdotool key Return
+        ;;
+    --copy-login)
+        credential="$(get_credential $password)"
+        echo "$credential" | xclip -selection clipboard
+        show_message "Copied credential for $password to clipboard"
+        ;;
+    --type-login)
+        credential="$(get_credential $password)"
+        xdotool type $credential
+        ;;
+    --semi-lazy)
+        type_credential_and_password
+        ;;
+    show)
+        pass show -c "$password" 2>/dev/null
+        ;;
+    --double-type)
+        type_password
+        xdotool key Tab
+        type_password
+        ;;
+    *)
+        print_usage
+        ;;
+esac

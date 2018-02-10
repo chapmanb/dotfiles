@@ -27,11 +27,14 @@
      ess
      extra-langs
      git
+     go
      python
      markdown
-     org
+     (org :variables
+          org-enable-github-support t)
      syntax-checking
      version-control
+     yaml
      )
    ;; A list of packages and/or extensions that will not be install and loaded.
    dotspacemacs-excluded-packages
@@ -145,7 +148,7 @@ before layers configuration."
 
   )
 
-(defun dotspacemacs/config ()
+(defun dotspacemacs/user-config ()
   "Configuration function.
  This function is called at the very end of Spacemacs initialization after
 layers configuration."
@@ -156,10 +159,11 @@ layers configuration."
   (require 'ox-beamer)
   (add-to-list 'org-modules 'org-table)
   (add-to-list 'org-modules 'org-clock)
-  (setq org-export-backends '(beamer html latex md gfm))
+  (setq org-export-backends '(beamer html latex md))
+  (setq org-clock-into-drawer nil)
   ;; org calendar
   (global-set-key "\C-cc" 'org-capture)
-  (setq org-directory (expand-file-name "~/Dropbox/personal/org/calendar"))
+  (setq org-directory (expand-file-name "~/personal/org/calendar"))
   (setq org-agenda-files (list org-directory))
   (setq org-default-notes-file (concat org-directory "/calendar.org"))
   (setq org-capture-templates
@@ -167,9 +171,13 @@ layers configuration."
            "* %?\n  %a")))
   ;; Fix annoying auto indent issues with electric-indent mode
   (defun fix-electric-indent-mode ()
-    (setq electric-indent-chars '(?\n)))
-  (add-hook 'python-mode-hook 'disable-electric-indent-mode)
-  (add-hook 'yaml-mode-hook 'disable-electric-indent-mode)
+    (setq electric-indent-inhibit t)
+    ;(disable-electric-indent-mode)
+    (setq electric-indent-chars '(?\n))
+    (if (fboundp 'electric-indent-local-mode)
+        (electric-indent-local-mode -1)))
+  (add-hook 'python-mode-hook 'fix-electric-indent-mode)
+  (add-hook 'yaml-mode-hook 'fix-electric-indent-mode)
   ;; Avoid doing vc checking on remote files
   (setq vc-ignore-dir-regexp
         (format "\\(%s\\)\\|\\(%s\\)"
@@ -191,3 +199,18 @@ layers configuration."
 
 ;; Do not write anything past this comment. This is where Emacs will
 ;; auto-generate custom variable definitions.
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(package-selected-packages
+   (quote
+    (paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(company-tooltip-common ((t (:inherit company-tooltip :weight bold :underline nil))))
+ '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil)))))

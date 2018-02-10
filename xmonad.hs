@@ -1,3 +1,6 @@
+-- Xmonad configuration
+-- To reload: mod-q
+
 import XMonad
 import XMonad.Hooks.DynamicLog
 import XMonad.Hooks.ManageDocks
@@ -16,6 +19,7 @@ import XMonad.Util.Paste
 import XMonad.Util.Themes
 import XMonad.Prompt
 import XMonad.Prompt.Ssh
+--import Xmonad.Prompt.Pass
 import XMonad.Actions.Submap
 import XMonad.Actions.SpawnOn
 import XMonad.Actions.CycleWS
@@ -65,12 +69,16 @@ myKeys x = [
     , ((modMask x, xK_semicolon), sendMessage NextLayout)
     , ((modMask x .|. shiftMask, xK_semicolon), windows W.shiftMaster)
     -- , ((modMask x, xK_colon), setLayout $ XMonad.layoutHook conf)
-    , ((modMask x, xK_space), spawn "emacsclient -c")
-    , ((modMask x .|. shiftMask, xK_space), spawn "emacs")
+    , ((modMask x, xK_space), spawn "/usr/bin/emacsclient -c")
+    , ((modMask x .|. shiftMask, xK_space), spawn "/usr/bin/emacs")
     -- Paste
     , ((modMask x, xK_y), submap . M.fromList $
                           [ ((0, xK_y), spawn "xdotool key --clearmodifiers 'Shift+Insert'")
                           ])
+    -- Password lookup and generation with pass
+    , ((modMask x , xK_p), spawn "passmenu --type")
+    , ((modMask x .|. shiftMask, xK_p), spawn "passmenu --type-login")
+    --, ((modMask x .|. controlMask, xK_p), passGeneratePrompt xpconfig)
     -- Locks up urxvt
     --, ((modMask x, xK_y), submap . M.fromList $
     --                      [ ((0, xK_y), pasteSelection)
@@ -82,7 +90,7 @@ finalKeys x = M.union (M.fromList (myKeys x)) (keys gnomeConfig x)
 defaultModMask :: KeyMask
 defaultModMask = mod4Mask
 
-myWorkspaces    = ["web", "mail"] ++ map show [3 .. 7 :: Int] ++ ["az", "servers"]
+myWorkspaces    = ["web", "mail"] ++ map show [3 .. 7 :: Int] ++ ["az", "weechat"]
 
 myManageHook = composeAll . concat $ [
   [className =? "Unity-2d-panel"    --> doIgnore]
