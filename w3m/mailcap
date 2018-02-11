@@ -1,0 +1,2 @@
+image/jpg; /usr/bin/display.im6 %s; test=test -n "$DISPLAY"
+image/jpeg; /usr/bin/display.im6 %s; test=test -n "$DISPLAY"
