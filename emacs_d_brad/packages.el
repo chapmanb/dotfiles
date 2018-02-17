@@ -15,10 +15,7 @@
     paredit
     offlineimap
     notmuch
-    notmuch-address
-    org2blog
     snakemake-mode
-    twittering-mode
     writegood-mode
     xclip
     ))
@@ -78,7 +75,6 @@
 
 (defun brad/init-notmuch ()
   (require 'notmuch)
-  (require 'notmuch-address)
   ;(require 'hl-line)
   ;(global-hl-line-mode t)
   ;(set-face-background 'hl-line "#444")
@@ -95,8 +91,6 @@
   (setq mm-text-html-renderer 'w3m-standalone)
   (setq message-default-mail-headers "Cc: \n")
   (setq message-auto-save-directory "~/mail/drafts")
-  (setq notmuch-address-command "~/.dotfiles/shell/nottoomuch/nottoomuch-addresses.sh")
-  (notmuch-address-message-insinuate)
   (setq notmuch-hello-recent-searches-max 0)
   (define-key notmuch-search-mode-map "k" 'notmuch-search-previous-thread)
   (define-key notmuch-search-mode-map "j" 'notmuch-search-next-thread)
@@ -155,6 +149,9 @@
   (define-key notmuch-search-mode-map "g" 'brad-mail-refresh)
   (define-key notmuch-show-mode-map "g" 'brad-mail-refresh)
   (define-key notmuch-hello-mode-map "q" 'brad-mail-quit)
+  ;; fixes: killing a notmuch buffer does not show the previous buffer
+  ;; https://github.com/syl20bnr/spacemacs/issues/2163
+  (push "\\*notmuch.+\\*" spacemacs-useful-buffers-regexp)
   (setq notmuch-search-line-faces `(("good" . '(:foreground "#268bd2"))
                                     ("junk" . '(:foreground "#cb4b16"))
                                     ("unread" . '(:foreground "#2aa198"))
@@ -166,26 +163,8 @@
             (lambda ()
               (set-face-attribute 'notmuch-message-summary-face nil :background "#303030"))))
 
-(defun brad/init-org2blog ()
-  (setq org2blog/wp-blog-alist
-        '(("bcbio"
-           :url "https://bcbio.wordpress.com/xmlrpc.php"
-           :username "bcbio")
-          ("smallchangebio"
-           :url "https://smallchangebio.wordpress.com/xmlrpc.php"
-           :username "bcbio")))
-  (setq org2blog/wp-use-sourcecode-shortcode t))
-
 (defun brad/init-snakemake-mode ()
   (require 'snakemake-mode))
-
-(defun brad/init-twittering-mode ()
-  (require 'twittering-mode)
-  (setq twittering-use-master-password t)
-  (setq twittering-icon-mode nil)
-  (setq twittering-timer-interval 900)
-  (setq twittering-url-show-status nil)
-  (setq twittering-tinyurl-service 'j.mp))
 
 (defun brad/init-xclip ()
   ;; Integrate with X copy buffer

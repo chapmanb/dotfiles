@@ -17,6 +17,7 @@
     ~/.vim/autoload/pathogen.vim: 
        create: true
        path: vim/bundle/vim-pathogen/autoload/pathogen.vim
+    ~/.w3m: w3m
     ~/.xmonad/xmonad.hs:
        create: true
        path: xmonad.hs
@@ -24,3 +25,6 @@
 
 - link: 
     ~/.emacs.d/private/brad: emacs_d_brad
+    ~/.pylintrc: pylintrc
+    ~/.config/flake8: flake8
+    ~/.config/pep8: pep8
