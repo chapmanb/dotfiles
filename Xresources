@@ -26,8 +26,11 @@
 URxvt*termName:  xterm-256color
 
 !*font: -xos4-terminus-medium-r-normal--14-*-*-*-*-*-iso8859-1
-*font: terminus-16
-Emacs*font: terminus-16
+!*font: terminus-16
+!Emacs*font: terminus-16
+!*font: xft:Fira Code:size=11
+*font: xft:Hack:size=11
+Emacs*font: hack-11
 
 ! Base16 Ocean
 ! Scheme: Chris Kempson (http://chriskempson.com)

@@ -5,3 +5,6 @@
 	user = chapmanb
 [merge]
 	renameLimit = 0
+
+[includeIf "gitdir:~/ginkgo/code/"]
+    path = ~/ginkgo/code/.gitconfig

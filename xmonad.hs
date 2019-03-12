@@ -61,10 +61,10 @@ myKeys x = [
     , ((modMask x .|. shiftMask, xK_comma), shiftToPrev >> prevWS)
     , ((modMask x .|. shiftMask, xK_period), shiftToNext >> nextWS)
     -- Programs
-    , ((modMask x, xK_Return), runInTerm "" "tmux a")
+    , ((modMask x, xK_Return), runInTerm "" "tmux -2 a")
     , ((modMask x .|. shiftMask, xK_Return), spawn $ XMonad.terminal x)
-    , ((modMask x, xK_bracketleft), sshPrompt defaultXPConfig)
-    , ((modMask x, xK_bracketright), shellPromptHere defaultXPConfig)
+    , ((modMask x, xK_bracketleft), sshPrompt def)
+    , ((modMask x, xK_bracketright), shellPromptHere def)
     , ((modMask x, xK_o), runInTerm "" "w3m https://duckduckgo.com")
     , ((modMask x, xK_semicolon), sendMessage NextLayout)
     , ((modMask x .|. shiftMask, xK_semicolon), windows W.shiftMaster)
@@ -75,9 +75,11 @@ myKeys x = [
     , ((modMask x, xK_y), submap . M.fromList $
                           [ ((0, xK_y), spawn "xdotool key --clearmodifiers 'Shift+Insert'")
                           ])
-    -- Password lookup and generation with pass
-    , ((modMask x , xK_p), spawn "passmenu --type")
-    , ((modMask x .|. shiftMask, xK_p), spawn "passmenu --type-login")
+    -- Password lookup and generation with dmenu and lastpass
+    -- , ((modMask x , xK_p), spawn "passmenu --type")
+    -- , ((modMask x .|. shiftMask, xK_p), spawn "passmenu --type-login")
+    , ((modMask x , xK_p), spawn "lastpass-dmenu --typeit")
+    , ((modMask x .|. shiftMask, xK_p), spawn "lastpass-dmenu --typeit-login")
     --, ((modMask x .|. controlMask, xK_p), passGeneratePrompt xpconfig)
     -- Locks up urxvt
     --, ((modMask x, xK_y), submap . M.fromList $
@@ -100,33 +102,15 @@ myManageHook = composeAll . concat $ [
 
 main = do
     -- External programs to run at start time
-    --spawn "gnome-screensaver"
-    --spawn "gnome-power-manager"
-    --spawn "gnome-settings-daemon"
-    --spawn "nm-applet"
-    --spawn "synclient TouchpadOff=1"
-    --spawn "autocutsel -f"
-    --spawn "xflux -z 02145"
-    --spawn "gtk-redshift"
-    spawn "setxkbmap -option ctrl:nocaps"
-    spawn "dropbox start"
     spawn "unclutter"
-    --sp <- spawnHere
-    -- Start xmobar and xmonad
-    --xmproc <- spawnPipe "/usr/bin/xmobar ~/.xmonad/xmobarrc"
     -- Start xmonad
     xmonad $ gnomeConfig
         { terminal = "urxvt -tn xterm-256color"
         , focusFollowsMouse = False
         , manageHook = manageSpawn <+> manageDocks <+> myManageHook <+> manageHook gnomeConfig
-	, layoutHook = myLayoutHook
-        -- , logHook = dynamicLogWithPP $ xmobarPP
-        --     { ppOutput = hPutStrLn xmproc
-        --     , ppCurrent = xmobarColor "white" "" . wrap "[" "]"
-        --     , ppTitle = shorten 50
-        --     }
-	, modMask = defaultModMask
-	, keys = finalKeys
+        , layoutHook = myLayoutHook
+        , modMask = defaultModMask
+        , keys = finalKeys
         , workspaces = myWorkspaces
         , borderWidth = 2
         , normalBorderColor  = "#0c2019"

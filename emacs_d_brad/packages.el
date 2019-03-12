@@ -12,8 +12,11 @@
 
 (setq brad-packages
   '(
+    anki-editor
+    epg
     paredit
     offlineimap
+    org-gcal
     notmuch
     snakemake-mode
     writegood-mode
@@ -22,16 +25,20 @@
 
 ;; For each package, define a function brad/init-<package-brad>
 ;;
+(defun brad/init-epg ()
+  (require 'epa-file)
+  (epa-file-enable)
+  (load-library "~/.emacs.d/private/brad/secrets.el.gpg"))
 (defun brad/init-paredit ()
   (require 'paredit)
   (eval-after-load 'paredit
     '(progn
-       (define-key paredit-mode-map "\C-c0" 'paredit-forward-slurp-sexp)
-       (define-key paredit-mode-map "\C-c9" 'paredit-forward-barf-sexp)
-     (define-key paredit-mode-map (kbd "{") 'paredit-open-curly)
-     (define-key paredit-mode-map (kbd "}") 'paredit-close-curly)
-     (define-key paredit-mode-map (kbd "M-{") 'paredit-wrap-curly)
-     (define-key paredit-mode-map (kbd "M-]") 'paredit-wrap-square)))
+       ;(define-key paredit-mode-map "\c-c0" 'paredit-forward-slurp-sexp)
+       ;(define-key paredit-mode-map "\c-c9" 'paredit-forward-barf-sexp)
+       (define-key paredit-mode-map (kbd "{") 'paredit-open-curly)
+       (define-key paredit-mode-map (kbd "}") 'paredit-close-curly)
+       (define-key paredit-mode-map (kbd "M-{") 'paredit-wrap-curly)
+       (define-key paredit-mode-map (kbd "M-]") 'paredit-wrap-square)))
   (add-hook 'clojure-mode-hook 'enable-paredit-mode)
   (add-hook 'nrepl-mode-hook 'paredit-mode)
   (add-hook 'cider-repl-mode-hook 'paredit-mode)
@@ -72,6 +79,10 @@
 
 (defun brad/init-offlineimap ()
   (require 'offlineimap))
+
+(defun brad/init-org-gcal ()
+  (require 'org-gcal)
+  (setq org-gcal-file-alist '(("bchapman@ginkgobioworks.com" .  "~/personal/org/calendar/ginkgo.org"))))
 
 (defun brad/init-notmuch ()
   (require 'notmuch)
@@ -178,3 +189,7 @@
 ;; Often the body of an initialize function uses `use-package'
 ;; For more info on `use-package', see readme:
 ;; https://github.com/jwiegley/use-package
+
+
+(defun brad/init-anki-editor ()
+  (require 'anki-editor))

@@ -12,7 +12,8 @@
    ;; List of configuration layers to load. If it is the symbol `all' instead
    ;; of a list then all discovered layers will be installed.
    dotspacemacs-configuration-layers
-   '(
+   '(csv
+     lua
      ;; --------------------------------------------------------
      ;; Example of useful layers you may want to use right away
      ;; Uncomment a layer name and press C-c C-c to install it
@@ -25,7 +26,6 @@
      clojure
      emacs-lisp
      ess
-     extra-langs
      git
      go
      python
@@ -53,6 +53,7 @@ before layers configuration."
   ;; This setq-default sexp is an exhaustive list of all the supported
   ;; spacemacs settings.
   (setq-default
+   dotspacemacs-enable-server t
    ;; Either `vim' or `emacs'. Evil is always enabled but if the variable
    ;; is `emacs' then the `holy-mode' is enabled at startup.
    dotspacemacs-editing-style 'vim
@@ -81,8 +82,8 @@ before layers configuration."
    dotspacemacs-colorize-cursor-according-to-state t
    ;; Default font. `powerline-scale' allows to quickly tweak the mode-line
    ;; size to make separators look not too crappy.
-   dotspacemacs-default-font '("terminus-16"
-                               :size 16
+   dotspacemacs-default-font '("Hack"
+                               :size 14
                                :powerline-scale 1.0)
    ;; The leader key
    dotspacemacs-leader-key "SPC"
@@ -152,6 +153,12 @@ before layers configuration."
   "Configuration function.
  This function is called at the very end of Spacemacs initialization after
 layers configuration."
+  ;; smartparens
+  (define-key evil-normal-state-map "\C-c0" 'sp-forward-slurp-sexp)
+  (define-key evil-normal-state-map "\C-c9" 'sp-forward-barf-sexp)
+  (define-key evil-normal-state-map "\C-c1" 'sp-backword-slurp-sexp)
+  (define-key evil-normal-state-map "\C-c2" 'sp-backword-barf-sexp)
+
   ;; ## org-mode
   ;; org-pomodoro -- avoid final sound
   (setq-default org-pomodoro-play-sounds nil)
@@ -191,8 +198,10 @@ layers configuration."
   ;; Handle clojure words like this->that
   (add-hook 'clojure-mode-hook (function
                                 (lambda ()
-                                  (modify-syntax-entry ?> "w" clojure-mode-syntax-table)
-                                  (modify-syntax-entry ?- "w" clojure-mode-syntax-table))))
+                                  ;(modify-syntax-entry ?> "w" clojure-mode-syntax-table)
+                                  ;(modify-syntax-entry ?- "w" clojure-mode-syntax-table)
+                                  (modify-syntax-entry ?> "w")
+                                  (modify-syntax-entry ?- "w"))))
   ;; Magit support
   (setq-default git-commit-check-style-conventions nil)
   )
@@ -206,7 +215,7 @@ layers configuration."
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))))
+    (avy go-mode git-commit async multiple-cursors clojure-mode packed with-editor hydra s dash evil-ediff dumb-jump column-enforce-mode clojure-snippets git-gutter+ diminish company cider anaconda-mode package-build bind-key bind-map evil base16-ocean-theme yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -214,3 +223,24 @@ layers configuration."
  ;; If there is more than one, they won't work right.
  '(company-tooltip-common ((t (:inherit company-tooltip :weight bold :underline nil))))
  '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil)))))
+(defun dotspacemacs/emacs-custom-settings ()
+  "Emacs custom settings.
+This is an auto-generated function, do not modify its content directly, use
+Emacs customize menu instead.
+This function is called at the very end of Spacemacs initialization."
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(package-selected-packages
+   (quote
+    (csv-mode avy go-mode git-commit async multiple-cursors clojure-mode packed with-editor hydra s dash evil-ediff dumb-jump column-enforce-mode clojure-snippets git-gutter+ diminish company cider anaconda-mode package-build bind-key bind-map evil base16-ocean-theme yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(company-tooltip-common ((t (:inherit company-tooltip :weight bold :underline nil))))
+ '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil)))))
+)

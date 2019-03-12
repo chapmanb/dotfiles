@@ -36,6 +36,7 @@ LP_PATH_KEEP=2
 # Defaults to 0 (do not display hostname when locally connected)
 # set to 1 if you want to always see the hostname
 LP_HOSTNAME_ALWAYS=0
+LP_ENABLE_TMUX=0
 
 # Do you want to display the user, even if the user is the same as the one logged in?
 # Defaults to 1 (always display the user)

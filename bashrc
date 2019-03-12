@@ -77,7 +77,6 @@ fi
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
-source <(gopass completion bash)
 
 ## highlighting
 BASE16_SHELL="$HOME/.dotfiles/shell/base16-shell/base16-ocean.dark.sh"
@@ -92,6 +91,10 @@ if [ -x /usr/bin/dircolors ]; then
     alias egrep='egrep --color=auto'
 fi
 
+# Last pass
+export LPASS_CLIPBOARD_COMMAND="xclip -selection clipboard -in -l 1"
+export LPASS_AGENT_TIMEOUT=0
+
 # Nix
 #if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
-source <(awless completion bash)
+#source <(awless completion bash)

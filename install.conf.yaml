@@ -5,11 +5,18 @@
     ~/.config/liquidpromptrc: 
       create: true
       path: liquidpromptrc
+    ~/.config/flake8: flake8
+    ~/.config/pep8: pep8
+    ~/.emacs.d/private/brad: emacs_d_brad
     ~/.gitconfig: gitconfig
+    ~/.msmtprc: msmtprc
+    ~/.notmuch-config: notmuch-config
+    ~/.offlineimap.py: offlineimap.py
+    ~/.offlineimaprc: offlineimaprc
+    ~/.pylintrc: pylintrc
     ~/.tmux.conf: tmux.conf
     ~/.tmux: tmux
     ~/.spacemacs: spacemacs
-    ~/.emacs.d: emacs_d_spacemacs
     ~/.vimrc: vimrc
     ~/.vim/bundle: 
        create: true
@@ -22,9 +29,3 @@
        create: true
        path: xmonad.hs
     ~/.Xresources: Xresources
-
-- link: 
-    ~/.emacs.d/private/brad: emacs_d_brad
-    ~/.pylintrc: pylintrc
-    ~/.config/flake8: flake8
-    ~/.config/pep8: pep8

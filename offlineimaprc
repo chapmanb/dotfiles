@@ -1,0 +1,80 @@
+# Configuration file for offlineimap
+
+[general]
+accounts = fastmail, ginkgo
+maxsyncaccounts = 1
+ui = TTYUI
+pythonfile = ~/.offlineimap.py
+
+[Account fastmail]
+localrepository = localfastmail
+remoterepository = remotefastmail
+presynchook = ~/mail/notmuch/notmuch-clean.sh
+postsynchook = ~/mail/notmuch/notmuch-poll.py
+#autorefresh = 2
+
+[Repository localfastmail]
+type = Maildir
+localfolders = ~/mail/fastmail
+#startdate = 2018-06-01
+
+[Repository remotefastmail]
+type = IMAP
+remotehost = mail.messagingengine.com
+ssl = yes
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+remoteuser = chapmanb@fastmail.com
+remotepasseval = get_pass("fastmail.com_offlineimap")
+folderfilter = lambda name: name in ['INBOX', 'INBOX.Sent']
+holdconnectionopen = yes
+
+[Account ginkgo]
+localrepository = localginkgo
+remoterepository = remoteginkgo
+postsynchook = ~/mail/notmuch/notmuch-poll.py
+
+[Repository localginkgo]
+type = Maildir
+localfolders = ~/mail/ginkgo
+
+[Repository remoteginkgo]
+type = Gmail
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+remoteuser = bchapman@ginkgobioworks.com
+remotepasseval = get_pass("google.com_ginkgo")
+folderfilter = lambda folder: folder == 'INBOX'
+
+[Account hsph]
+localrepository = localhsph
+remoterepository = remotehsph
+postsynchook = ~/mail/notmuch/notmuch-poll.py
+#autorefresh = 2
+
+[Repository localhsph]
+type = Maildir
+localfolders = ~/mail/hsph
+
+[Repository remotehsph]
+type = IMAP
+remotehost = imap.sph.harvard.edu
+ssl = yes
+sslcacertfile = /etc/ssl/certs/ca-certificates.crt
+remoteuser = bchapman@hsph.harvard.edu
+remotepasseval = get_pass("hsph.harvard.edu_email")
+folderfilter = lambda name: name in ['INBOX']
+holdconnectionopen = yes
+
+# [Account mgh]
+# localrepository = localmgh
+# remoterepository = remotemgh
+# 
+# [Repository remotemgh]
+# type = IMAP
+# remotehost = daedalus.mgh.harvard.edu
+# ssl = yes
+# remoteuser = chapman@molbio.mgh.harvard.edu
+# 
+# [Repository localmgh]
+# type = Maildir
+# localfolders = ~/mail/mgh
+
