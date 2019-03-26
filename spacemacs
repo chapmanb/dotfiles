@@ -32,6 +32,11 @@
      markdown
      (org :variables
           org-enable-github-support t)
+     (shell :variables
+            shell-default-shell 'ansi-term
+            shell-default-position 'right
+            shell-default-height 50
+            shell-default-width 50)
      syntax-checking
      version-control
      yaml
@@ -115,6 +120,7 @@ before layers configuration."
    ;; If non nil `spacemacs/toggle-fullscreen' will not use native fullscreen.
    ;; Use to disable fullscreen animations in OSX."
    dotspacemacs-fullscreen-use-non-native nil
+   dotspacemacs-frame-title-format "%a %t"
    ;; If non nil the frame is maximized when Emacs starts up.
    ;; Takes effect only if `dotspacemacs-fullscreen-at-startup' is nil.
    ;; (Emacs 24.4+ only)
@@ -129,6 +135,7 @@ before layers configuration."
    dotspacemacs-inactive-transparency 90
    ;; If non nil unicode symbols are displayed in the mode line.
    dotspacemacs-mode-line-unicode-symbols t
+   dotspacemacs-mode-line-theme `spacemacs
    ;; If non nil smooth scrolling (native-scrolling) is enabled. Smooth
    ;; scrolling overrides the default behavior of Emacs which recenters the
    ;; point when it reaches the top or bottom of the screen.
@@ -170,7 +177,7 @@ layers configuration."
   (setq org-clock-into-drawer nil)
   ;; org calendar
   (global-set-key "\C-cc" 'org-capture)
-  (setq org-directory (expand-file-name "~/personal/org/calendar"))
+  (setq org-directory (expand-file-name "~/drive/org/calendar"))
   (setq org-agenda-files (list org-directory))
   (setq org-default-notes-file (concat org-directory "/calendar.org"))
   (setq org-capture-templates
@@ -235,12 +242,11 @@ This function is called at the very end of Spacemacs initialization."
  ;; If there is more than one, they won't work right.
  '(package-selected-packages
    (quote
-    (csv-mode avy go-mode git-commit async multiple-cursors clojure-mode packed with-editor hydra s dash evil-ediff dumb-jump column-enforce-mode clojure-snippets git-gutter+ diminish company cider anaconda-mode package-build bind-key bind-map evil base16-ocean-theme yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))))
+    (rainbow-delimiters evil-mc zenburn-theme yasnippet-snippets yapfify yaml-mode xterm-color xclip ws-butler writeroom-mode writegood-mode winum which-key volatile-highlights vi-tilde-fringe uuidgen use-package unfill toc-org symon string-inflection spaceline-all-the-icons solarized-theme snakemake-mode smeargle shell-pop restart-emacs pyvenv pytest pyenv-mode py-isort popwin pippel pipenv pip-requirements persp-mode pcre2el password-generator paradox ox-gfm overseer orgit org-projectile org-present org-pomodoro org-mime org-gcal org-download org-bullets org-brain open-junk-file offlineimap notmuch neotree nameless mwim multi-term move-text monokai-theme mmm-mode markdown-toc magit-svn magit-gitflow macrostep lorem-ipsum live-py-mode link-hint indent-guide importmagic hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation helm-xref helm-themes helm-swoop helm-pydoc helm-purpose helm-projectile helm-org-rifle helm-mode-manager helm-make helm-gitignore helm-git-grep helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio godoctor go-tag go-rename go-impl go-guru go-gen-test go-fill-struct go-eldoc gnuplot gitignore-templates gitconfig-mode gitattributes-mode git-timemachine git-messenger git-link git-gutter-fringe git-gutter-fringe+ gh-md fuzzy font-lock+ flycheck-pos-tip flx-ido fill-column-indicator fancy-battery eyebrowse expand-region evil-visualstar evil-visual-mark-mode evil-unimpaired evil-tutor evil-surround evil-org evil-numbers evil-nerd-commenter evil-matchit evil-magit evil-lisp-state evil-lion evil-indent-plus evil-iedit-state evil-goggles evil-exchange evil-escape evil-ediff evil-cleverparens evil-args evil-anzu ess-R-data-view eshell-z eshell-prompt-extras esh-help elisp-slime-nav editorconfig dumb-jump dotenv-mode doom-modeline diminish diff-hl define-word cython-mode csv-mode counsel-projectile company-statistics company-quickhelp company-lua company-go company-anaconda column-enforce-mode clojure-snippets clojure-cheatsheet clean-aindent-mode cider-eval-sexp-fu centered-cursor-mode browse-at-remote base16-theme auto-yasnippet auto-highlight-symbol auto-compile anki-editor aggressive-indent ace-window ace-link ace-jump-helm-line ac-ispell))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
- '(company-tooltip-common ((t (:inherit company-tooltip :weight bold :underline nil))))
- '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil)))))
+ )
 )

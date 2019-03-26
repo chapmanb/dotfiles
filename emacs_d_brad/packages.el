@@ -82,7 +82,7 @@
 
 (defun brad/init-org-gcal ()
   (require 'org-gcal)
-  (setq org-gcal-file-alist '(("bchapman@ginkgobioworks.com" .  "~/personal/org/calendar/ginkgo.org"))))
+  (setq org-gcal-file-alist '(("bchapman@ginkgobioworks.com" .  "~/drive/org/calendar/ginkgo.org"))))
 
 (defun brad/init-notmuch ()
   (require 'notmuch)
@@ -153,7 +153,7 @@
   (defun brad-mail-quit ()
     (interactive)
     (offlineimap-quit)
-    (shell-command "notmuch dump > ~/mail/notmuch/tag-dump.txt")
+    (shell-command "notmuch dump > ~/drive/mail/tag-dump.txt")
     (notmuch-bury-or-kill-this-buffer)
     (if (get-buffer "*Notmuch errors*")
         (kill-buffer "*Notmuch errors*")))

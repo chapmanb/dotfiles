@@ -2,6 +2,14 @@
 #!/bin/bash
 set -eu -o pipefail
 
+sudo apt-get update
+
+sudo apt-get install gnome-tweak-tool gnome-shell-extensions
+sudo apt-get install rxvt-unicode tmux w3m fonts-hack unclutter xdotool xclip dmenu urlview
+sudo apt-get install git emacs silversearcher-ag
+sudo apt-get install notmuch python-notmuch offlineimap msmtp pass lastpass-cli
+
+
 sudo add-apt-repository ppa:gekkio/xmonad
 sudo add-apt-repository ppa:nathan-renniewaldock/flux
 sudo add-apt-repository ppa:kelleyk/emacs
@@ -11,12 +19,7 @@ sudo sh -c 'echo "deb https://weechat.org/ubuntu $(lsb_release -cs) main" >> /et
 sudo apt-key adv --keyserver keys.gnupg.net --recv-keys 11E9DE8848F2B65222AA75B8D1820DB22A11534E
 wget -O - https://pkg.tarsnap.com/tarsnap-deb-packaging-key.asc | sudo apt-key add -
 echo "deb http://pkg.tarsnap.com/deb/$(lsb_release -s -c) ./" | sudo tee -a /etc/apt/sources.list.d/tarsnap.list
-sudo apt-get update
-
-sudo apt-get install xmonad gnome-session-xmonad rxvt-unicode tmux w3m fonts-hack unclutter xdotool xclip dmenu urlview
-sudo apt-get install git emacs silversearcher-ag
-sudo apt-get install notmuch python-notmuch offlineimap msmtp
-sudo apt-get install pass
+sudo apt-get install xmonad gnome-session-xmonad 
 
 sudo apt-get install weechat weechat-python weechat-lua weechat-perl weechat-ruby ansible bitlbee python-pip
 sudo apt-get install fluxgui

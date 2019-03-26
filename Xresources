@@ -7,6 +7,7 @@
 *scrollTtyOutput: false
 *scrollWithBuffer: true
 *scrollTtyKeypress: true
+*selectToClipboard: true
 
 ! Uses resources form urxvt-perls on GitHub
 ! https://github.com/muennich/urxvt-perls/ 

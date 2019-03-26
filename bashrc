@@ -70,9 +70,9 @@ if [ -f ~/.dotfiles/shell/liquidprompt/liquidprompt ]; then
     source ~/.dotfiles/shell/liquidprompt/liquidprompt
 fi
 
-if [ -f ~/.dotfiles/shell/bashmarks/bashmarks.sh ]; then
-    source ~/.dotfiles/shell/bashmarks/bashmarks.sh
-fi
+#if [ -f ~/.dotfiles/shell/bashmarks/bashmarks.sh ]; then
+#    source ~/.dotfiles/shell/bashmarks/bashmarks.sh
+#fi
 
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
