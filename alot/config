@@ -1,0 +1,49 @@
+initial_command = search (tag:inbox or tag:unread) AND NOT tag:deleted
+quit_on_last_bclose = true
+editor_cmd = vim -f -c 'set filetype=mail' +
+displayed_headers = Date, From, To, Cc, Subject, Tags
+edit_headers_blacklist = Content-Type, MIME-Version, References
+prefer_plaintext = true
+
+[accounts]
+  [[fastmail]]
+      realname = Brad Chapman
+      address = chapmanb@fastmail.com
+      aliases = chapmanb@50mail.com,bchapman@hsph.harvard.edu
+      sendmail_command = msmtp --account=fastmail -t
+      sent_box = maildir://~/mail/fastmail/INBOX.Senta
+    [[[abook]]]
+      type = shellcommand
+      command = "notmuch address --format=json date:3Y.."
+      regexp = '\[?{"name": "(?P<name>.*)", "address": "(?P<email>.+)", "name-addr": ".*"}[,\]]?'
+      shellcommand_external_filtering = False
+      ignorecase = True
+  
+  [[ginkgo]]
+      realname = Brad Chapman
+      address = bchapman@ginkgobioworks.com
+      sendmail_command = msmtp --account=ginkgo -t
+      sent_box = maildir://~/mail/fastmail/INBOX.Sent
+    [[[abook]]]
+      type = shellcommand
+      command = "notmuch address --format=json date:3Y.."
+      regexp = '\[?{"name": "(?P<name>.*)", "address": "(?P<email>.+)", "name-addr": ".*"}[,\]]?'
+      shellcommand_external_filtering = False
+      ignorecase = True
+
+[bindings]
+  I = search (tag:inbox or tag:unread) AND NOT tag:deleted
+  , = shellescape --refocus=true 'offlineimap -u basic'; refresh
+  d = toggletags deleted
+  q = bclose
+  / = prompt 'search '
+  + = retagprompt
+  'ctrl b' = move page up
+  'ctrl f' = move page down
+
+  [[thread]]
+  R = reply --all
+  | = pipeto --format=decoded less
+  m = 
+  p =
+  P =

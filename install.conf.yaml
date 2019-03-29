@@ -7,6 +7,7 @@
       path: liquidpromptrc
     ~/.config/flake8: flake8
     ~/.config/pep8: pep8
+    ~/.config/alot: alot
     ~/.emacs.d/private/brad: emacs_d_brad
     ~/.gitconfig: gitconfig
     ~/.msmtprc: msmtprc

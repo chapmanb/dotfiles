@@ -95,6 +95,9 @@ fi
 export LPASS_CLIPBOARD_COMMAND="xclip -selection clipboard -in -l 1"
 export LPASS_AGENT_TIMEOUT=0
 
+# Notmuch mail with alot
+alias alot=~/.mail/env/bin/alot
+
 # Nix
 #if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
 #source <(awless completion bash)

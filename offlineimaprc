@@ -9,14 +9,13 @@ pythonfile = ~/.offlineimap.py
 [Account fastmail]
 localrepository = localfastmail
 remoterepository = remotefastmail
-presynchook = ~/mail/notmuch/notmuch-clean.sh
-postsynchook = ~/mail/notmuch/notmuch-poll.py
+presynchook = ~/.dotfiles/notmuch/notmuch-clean.sh
+postsynchook = ~/.dotfiles/notmuch/notmuch-poll.py
 #autorefresh = 2
 
 [Repository localfastmail]
 type = Maildir
 localfolders = ~/mail/fastmail
-#startdate = 2018-06-01
 
 [Repository remotefastmail]
 type = IMAP
@@ -27,11 +26,12 @@ remoteuser = chapmanb@fastmail.com
 remotepasseval = get_pass("fastmail.com_offlineimap")
 folderfilter = lambda name: name in ['INBOX', 'INBOX.Sent']
 holdconnectionopen = yes
+startdate = 2018-06-01
 
 [Account ginkgo]
 localrepository = localginkgo
 remoterepository = remoteginkgo
-postsynchook = ~/mail/notmuch/notmuch-poll.py
+postsynchook = ~/.dotfiles/notmuch/notmuch-poll.py
 
 [Repository localginkgo]
 type = Maildir
@@ -47,7 +47,7 @@ folderfilter = lambda folder: folder == 'INBOX'
 [Account hsph]
 localrepository = localhsph
 remoterepository = remotehsph
-postsynchook = ~/mail/notmuch/notmuch-poll.py
+postsynchook = ~/.dotfiles/notmuch/notmuch-poll.py
 #autorefresh = 2
 
 [Repository localhsph]

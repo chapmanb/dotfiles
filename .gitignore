@@ -9,3 +9,4 @@ tmux/plugins/tmux-urlview/
 tmux/plugins/tmux-yank/
 tmux/resurrect
 w3m
+*/__pycache__
