@@ -2,14 +2,23 @@
 
 - link:
     ~/.bashrc: bashrc
-    ~/.config/liquidpromptrc: 
+    ~/.config/liquidpromptrc:
       create: true
       path: liquidpromptrc
     ~/.config/flake8: flake8
     ~/.config/pep8: pep8
     ~/.config/alot: alot
+    ~/.config/pip/pip.conf:
+      create: true
+      path: pip.conf
+    ~/.config/yapf/style:
+      create: true
+      path: yapf.cfg
     ~/.emacs.d/private/brad: emacs_d_brad
     ~/.gitconfig: gitconfig
+    ~/.lein/profiles.clj:
+      create: true
+      path: lein/profiles.clj
     ~/.msmtprc: msmtprc
     ~/.notmuch-config: notmuch-config
     ~/.offlineimap.py: offlineimap.py
@@ -22,7 +31,7 @@
     ~/.vim/bundle: 
        create: true
        path: vim/bundle
-    ~/.vim/autoload/pathogen.vim: 
+    ~/.vim/autoload/pathogen.vim:
        create: true
        path: vim/bundle/vim-pathogen/autoload/pathogen.vim
     ~/.w3m: w3m

@@ -74,6 +74,10 @@ fi
 #    source ~/.dotfiles/shell/bashmarks/bashmarks.sh
 #fi
 
+if [ -f ~/.dotfiles/mintty-colors-solarized/mintty-solarized-dark.sh ]; then
+	source ~/.dotfiles/mintty-colors-solarized/mintty-solarized-dark.sh
+fi
+
 if [ -f /etc/bash_completion ] && ! shopt -oq posix; then
     . /etc/bash_completion
 fi
@@ -98,6 +102,31 @@ export LPASS_AGENT_TIMEOUT=0
 # Notmuch mail with alot
 alias alot=~/.mail/env/bin/alot
 
+# vim python dependencies
+export PATH=$PATH:~/.local/bin
+
 # Nix
 #if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
 #source <(awless completion bash)
+
+[ -f ~/.fzf.bash ] && source ~/.fzf.bash
+export FZF_DEFAULT_COMMAND='rg --files'
+
+# WSL (Windows Subsystem for Linux) specific settings.
+if grep -qE "(Microsoft|WSL)" /proc/version &>/dev/null; then
+    # Adjustments for WSL's file / folder permission metadata.
+    if [ "$(umask)" = "0000" ]; then
+      umask 0022
+    fi
+
+    # Access local X-server with VcXsrv.
+    #   Requires: https://sourceforge.net/projects/vcxsrv/ (or alternative)
+    export DISPLAY=:0
+
+    # Windows Docker
+    # https://nickjanetakis.com/blog/setting-up-docker-for-windows-and-wsl-to-work-flawlessly
+    export DOCKER_HOST=tcp://localhost:2375
+
+    # ssh-agent on windows
+    eval $(~/windows_home/local/share/ssh-agent-wsl/ssh-agent-wsl -r)
+fi

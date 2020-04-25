@@ -1,4 +1,4 @@
-initial_command = search (tag:inbox or tag:unread) AND NOT tag:deleted
+initial_command = search '(tag:inbox or tag:unread) AND NOT tag:deleted'
 quit_on_last_bclose = true
 editor_cmd = vim -f -c 'set filetype=mail' +
 displayed_headers = Date, From, To, Cc, Subject, Tags
@@ -40,6 +40,10 @@ prefer_plaintext = true
   + = retagprompt
   'ctrl b' = move page up
   'ctrl f' = move page down
+  . = 
+
+  [[search]]
+  s = untag unread; untag good
 
   [[thread]]
   R = reply --all

@@ -5,11 +5,12 @@ set -eu -o pipefail
 sudo apt-get update
 
 sudo apt-get install gnome-tweak-tool gnome-shell-extensions
-sudo apt-get install rxvt-unicode tmux w3m fonts-hack unclutter xdotool xclip dmenu urlview
-sudo apt-get install git emacs silversearcher-ag
+sudo apt-get install rxvt-unicode unclutter xdotool xclip dmenu emacs
 
+sudo apt-get install git tmux w3m fonts-hack silversearcher-ag urlview
 sudo apt-get install notmuch libnotmuch5 python-notmuch offlineimap msmtp pass lastpass-cli
 sudo apt-get install python3-setuptools python3-magic python3-configobj python3-urwid python3-urwidtrees python3-gpg python3-venv python3-wheel python3-dev
+sudo apt-get install vim-gtk
 
 python3 -m venv --system-site-packages ~/.mail/env
 ~/.mail/env/bin/pip install -e 'git+https://github.com/notmuch/notmuch.git#egg=notmuch&subdirectory=bindings/python'
@@ -17,7 +18,13 @@ python3 -m venv --system-site-packages ~/.mail/env
 ~/.mail/env/bin/pip install service_identity
 ~/.mail/env/bin/pip install 'git+https://github.com/pazz/alot.git#egg=alot'
 
+# Windows 10
+https://github.com/rupor-github/ssh-agent-wsl
 
+choco install -y docker-desktop emacs gpg4win git hackfont ag hunspell.portable
+choco install -y vcxsrv
+
+# Older setup with xmonad
 sudo add-apt-repository ppa:gekkio/xmonad
 sudo add-apt-repository ppa:nathan-renniewaldock/flux
 sudo add-apt-repository ppa:kelleyk/emacs
