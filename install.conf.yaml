@@ -14,7 +14,9 @@
     ~/.config/yapf/style:
       create: true
       path: yapf.cfg
-    ~/.emacs.d/private/brad: emacs_d_brad
+    ~/.emacs.d/private/brad:
+      create: true
+      path: emacs_d_brad
     ~/.gitconfig: gitconfig
     ~/.lein/profiles.clj:
       create: true
@@ -28,12 +30,6 @@
     ~/.tmux: tmux
     ~/.spacemacs: spacemacs
     ~/.vimrc: vimrc
-    ~/.vim/bundle: 
-       create: true
-       path: vim/bundle
-    ~/.vim/autoload/pathogen.vim:
-       create: true
-       path: vim/bundle/vim-pathogen/autoload/pathogen.vim
     ~/.w3m: w3m
     ~/.xmonad/xmonad.hs:
        create: true

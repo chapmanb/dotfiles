@@ -1,4 +1,5 @@
 #!/usr/bin/env bb
+;; Bootstrap pathogen and vim plugins
 
 (def plugins
   {"base16-vim" "https://github.com/chriskempson/base16-vim.git"
@@ -20,11 +21,21 @@
    "vim-slime" "git://github.com/jpalardy/vim-slime.git"
    "vim-surround" "https://github.com/tpope/vim-surround.git"})
 
-(def bundle-dir "~/.vim/bundle")
-(when-not (.exists (io/file bundle-dir))
-  (shell/sh "mkdir" "-p" bundle-dir))
+(def bundle-dir (io/file (System/getenv "HOME") ".vim" "bundle"))
+(def autoload-dir (io/file (System/getenv "HOME") ".vim" "autoload"))
 
-(doseq [plugin giturl]
+(doseq [base-dir [bundle-dir autoload-dir]]
+  (when-not (.exists (io/file base-dir))
+    (shell/sh "mkdir" "-p" (str base-dir))))
+
+(doseq [[plugin giturl] plugins]
   (let [out-dir (io/file bundle-dir plugin)]
     (when-not (.exists out-dir)
+      (println (str out-dir) giturl)
       (shell/sh "git" "clone" giturl (str out-dir)))))
+
+(let [pathogen-file "pathogen.vim"
+      pathogen-autoload (io/file autoload-dir pathogen-file)]
+  (when-not (.exists pathogen-autoload)
+    (shell/sh "ln" "-s" (str (io/file bundle-dir "vim-pathogen" "autoload" pathogen-file))
+              (str pathogen-autoload))))

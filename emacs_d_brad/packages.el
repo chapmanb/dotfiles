@@ -12,15 +12,15 @@
 
 (setq brad-packages
   '(
-    anki-editor
-    epg
+    ;; anki-editor
+    ;; epg
     paredit
-    offlineimap
-    org-gcal
-    notmuch
-    snakemake-mode
+    ;; offlineimap
+    ;; org-gcal
+    ;; notmuch
+    ;; snakemake-mode
     writegood-mode
-    xclip
+    ;; xclip
     ))
 
 ;; For each package, define a function brad/init-<package-brad>

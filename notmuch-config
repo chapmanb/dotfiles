@@ -11,7 +11,7 @@
 # configured here named ".notmuch".
 #
 [database]
-path=/home/chapmanb/mail
+path=/home/bchapman/mail
 
 # User configuration
 #

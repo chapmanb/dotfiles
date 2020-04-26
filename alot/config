@@ -11,7 +11,7 @@ prefer_plaintext = true
       address = chapmanb@fastmail.com
       aliases = chapmanb@50mail.com,bchapman@hsph.harvard.edu
       sendmail_command = msmtp --account=fastmail -t
-      sent_box = maildir://~/mail/fastmail/INBOX.Senta
+      sent_box = maildir://~/mail/fastmail/INBOX.Sent
     [[[abook]]]
       type = shellcommand
       command = "notmuch address --format=json date:3Y.."
