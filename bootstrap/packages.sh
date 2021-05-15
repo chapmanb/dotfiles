@@ -34,7 +34,7 @@ sudo apt install emacs26 gnutls-bin
 sudo add-apt-repository ppa:alessandro-strada/ppa
 sudo apt-get install google-drive-ocamlfuse
 google-drive-ocamlfuse
-google-drive-ocamlfuse ~/drive
+google-drive-ocamlfuse /mnt/drive
 
 ## Old stuff
 

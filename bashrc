@@ -13,6 +13,7 @@ fi
 export PATH=$PATH:/sbin/:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
 
 # -- Standard configuration
+
 umask 002
 alias rm='rm -i'
 alias cp='cp -i'
@@ -27,8 +28,12 @@ export DEBIAN_FRONTEND=noninteractive
 export HISTCONTROL=ignoreboth
 export HISTCONTROL=erasedups
 shopt -s histappend
-export HISTSIZE=50000
-export HISTFILESIZE=50000
+export HISTSIZE=10000000
+export HISTFILESIZE=10000000
+export PROMPT_COMMAND='history -a'
+__reload_history ()
+[[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
+
 shopt -s checkwinsize
 
 # bcbio
@@ -109,8 +114,6 @@ export PATH=$PATH:~/.local/bin
 #if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
 #source <(awless completion bash)
 
-[ -f ~/.fzf.bash ] && source ~/.fzf.bash
-export FZF_DEFAULT_COMMAND='rg --files'
 
 # WSL (Windows Subsystem for Linux) specific settings.
 if grep -qE "(Microsoft|WSL)" /proc/version &>/dev/null; then

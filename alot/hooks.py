@@ -4,7 +4,7 @@ import re
 # Avoid sending e-mails without attachments
 async def pre_envelope_send(ui, dbm, cmd):
     e = ui.current_buffer.envelope
-    if re.match('.*[Aa]ttach', e.body, re.DOTALL) and\
+    if re.match('.*[Aa]ttach', e.body_txt, re.DOTALL) and\
        not e.attachments:
         msg = 'no attachments. send anyway?'
         if not (await ui.choice(msg, select='yes')) == 'yes':
