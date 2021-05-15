@@ -2,6 +2,7 @@
 
 - link:
     ~/.bashrc: bashrc
+    ~/.inputrc: inputrc
     ~/.config/liquidpromptrc:
       create: true
       path: liquidpromptrc
@@ -18,10 +19,15 @@
       create: true
       path: emacs_d_brad
     ~/.gitconfig: gitconfig
+    ~/.datomic/dev-local.edn:
+      create: true
+      path: datomic/dev-local.edn
     ~/.lein/profiles.clj:
       create: true
       path: lein/profiles.clj
-    ~/.msmtprc: msmtprc
+    ~/.config/msmtp/config:
+      path: msmtprc
+      create: true
     ~/.notmuch-config: notmuch-config
     ~/.offlineimap.py: offlineimap.py
     ~/.offlineimaprc: offlineimaprc
