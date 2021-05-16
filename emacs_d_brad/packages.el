@@ -48,11 +48,12 @@
   (require 'writegood-mode)
   (setq whitespace-line-column 100)
   (setq whitespace-style '(face tabs empty trailing lines-tail))
-  (dolist (hook '(python-mode-hook
-                  clojure-mode-hook
-                  ruby-mode-hook))
-    ;;(add-hook hook 'writegood-mode)
-    (add-hook hook 'flyspell-prog-mode))
+  ;; (dolist (hook '(python-mode-hook
+  ;;                 clojure-mode-hook
+  ;;                 ruby-mode-hook))
+  ;;   (add-hook hook 'writegood-mode)
+  ;;   (add-hook hook 'flyspell-prog-mode)
+  ;;   )
 
   (dolist (hook '(text-mode-hook
                   org-mode-hook
@@ -80,9 +81,9 @@
 (defun brad/init-offlineimap ()
   (require 'offlineimap))
 
-(defun brad/init-org-gcal ()
-  (require 'org-gcal)
-  (setq org-gcal-file-alist '(("bchapman@ginkgobioworks.com" .  "~/drive/org/calendar/ginkgo.org"))))
+; (defun brad/init-org-gcal ()
+;   (require 'org-gcal)
+;   (setq org-gcal-file-alist '(("bchapman@ginkgobioworks.com" .  "~/drive/org/calendar/ginkgo.org"))))
 
 (defun brad/init-notmuch ()
   (require 'notmuch)
