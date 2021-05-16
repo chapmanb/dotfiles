@@ -118,13 +118,20 @@ autocmd FileType clojure nnoremap <buffer> <localleader>r :Require<cr>
 autocmd FileType clojure nnoremap <buffer> <localleader>R :Require!<cr>
 autocmd FileType clojure nnoremap <buffer> <localleader>t :.RunTests<cr>
 autocmd FileType clojure nnoremap <buffer> <localleader>T :RunAllTests<cr>
+autocmd FileType clojure nnoremap <buffer> <localleader>T :RunAllTests<cr>
+let g:sexp_mappings = {
+      \ 'sexp_capture_prev_element': '<LocalLeader>h',
+      \ 'sexp_emit_head_element':    '<LocalLeader>j',
+      \ 'sexp_emit_tail_element':    '<LocalLeader>k',
+      \ 'sexp_capture_next_element': '<LocalLeader>l'
+      \ }
 
 " Table formatting with vim-easy-align
-xmap ga <Plug>(EasyAlign)
-nmap ga <Plug>(EasyAlign)
+" xmap ga <Plug>(EasyAlign)
+" nmap ga <Plug>(EasyAlign)
 
 " Setting for R
-let vimrplugin_underscore=0
+" let vimrplugin_underscore=0
 
 " Keyboard mappings for cutting and pasting large amounts of text without
 " changing it (ie. inserting tabs).
@@ -134,6 +141,9 @@ vmap    _O      :w! ~/.vi_tmp<CR>
 nmap    _P      :r ~/.vi_tmp<CR>
 
 " Key mappings for emacs keystrokes for brain freezes
+inoremap <C-x> <esc>
+map <C-x> <esc>
+map <C-a> <Nop>
 map <C-s> :w<CR>
 imap <C-s> :w<CR>
 map <C-c> :q<CR>
@@ -142,6 +152,7 @@ imap <C-c> :q<CR>
 " Ale code cleanup and linting
 let g:ale_linters = {}
 let g:ale_linters['python'] = ['flake8']
+let g:ale_linters['clojure'] = ['clj-kondo']
 let g:ale_fixers = {}
 let g:ale_fixers['python'] =  ['yapf']
 
