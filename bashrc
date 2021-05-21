@@ -8,6 +8,9 @@ fi
 if [[ -f $HOME/.bashrc.local ]]; then
     source $HOME/.bashrc.local
 fi
+if [[ -f $HOME/.bashrc.ginkgo ]]; then
+    source $HOME/.bashrc.ginkgo
+fi
 
 # -- Standard PATHs
 export PATH=$PATH:/sbin/:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/usr/X11R6/bin
