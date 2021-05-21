@@ -72,7 +72,7 @@ def main():
                 adjust_tags(msg, ["good"])
             if add_to_inbox:
                 adjust_tags(msg, ["inbox", "unread"], ["new"])
-            for tag, emails in auto_tags.iteritems():
+            for tag, emails in auto_tags.items():
                 if contains(t, emails):
                     adjust_tags(msg, [tag])
             #print t, f, s
