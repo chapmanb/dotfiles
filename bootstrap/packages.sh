@@ -7,15 +7,17 @@ sudo apt-get update
 sudo apt-get install -y gnome-tweak-tool gnome-shell-extensions
 sudo apt-get install -y unclutter xdotool xclip xsel dmenu vim-gtk
 
-sudo apt-get install -y git tmux w3m fonts-hack silversearcher-ag urlview
-sudo apt-get install -y notmuch libnotmuch5 python-notmuch offlineimap msmtp pass lastpass-cli
-sudo apt-get install -y python3-setuptools python3-magic python3-configobj python3-urwid python3-urwidtrees python3-gpg python3-venv python3-wheel python3-dev openjdk-8-jdk-headless
+sudo apt-get install -y git tmux w3m fonts-hack silversearcher-ag ripgrep urlview
+sudo apt-get install -y notmuch libnotmuch5 python3-notmuch offlineimap msmtp pass lastpass-cli
+sudo apt-get install -y python3-setuptools python3-magic python3-configobj python3-urwid python3-urwidtrees python3-gpg python3-venv python3-wheel python3-dev openjdk-11-jdk-headless
+
+sudo add-apt-repository ppa:kelleyk/emacs
+sudo apt-get update
+sudo apt install emacs27 gnutls-bin
 
 curl -s https://raw.githubusercontent.com/borkdude/babashka/master/install -o install-babashka && chmod +x install-babashka && ./install-babashka
 
 wget https://raw.githubusercontent.com/technomancy/leiningen/stable/bin/lein && chmod +x lein && mv lein /usr/local/bin
-
-curl -LO https://github.com/BurntSushi/ripgrep/releases/download/11.0.2/ripgrep_11.0.2_amd64.deb && sudo dpkg -i ripgrep_11.0.2_amd64.deb
 
 python3 -m venv --system-site-packages ~/.mail/env
 ~/.mail/env/bin/pip install -e 'git+https://github.com/notmuch/notmuch.git#egg=notmuch&subdirectory=bindings/python'
@@ -26,7 +28,7 @@ python3 -m venv --system-site-packages ~/.mail/env
 sudo apt autoremove emacs emacs23 emacs24 emacs25
 sudo add-apt-repository ppa:kelleyk/emacs
 sudo apt-get update
-sudo apt install emacs26 gnutls-bin
+sudo apt install emacs27 gnutls-bin
 
 # Zoom https://zoom.us/download#client_4meeting
 
