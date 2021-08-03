@@ -5,48 +5,80 @@
 )
 
 (defsrc
-	 tab  q    w    e    r    t    y    u    i    o    p  [
-   caps a    s    d    f    g    h    j    k    l    ;  '
+   `    1    2    3    4    5    6    7    8    9    0  -   =
+	 tab  q    w    e    r    t    y    u    i    o    p  [   ]
+   caps a    s    d    f    g    h    j    k    l    ;  '  ret
 	      z    x    c    v    b    n    m    ,    .    /
 	     lctl met  lalt      spc         ralt ssrq rctl
 )
 
 ;; Default layout aliases for multi keys
 (defalias
-	esc_num1 (tap-next-release esc (layer-toggle number1))
-	spc_nav2 (tap-next-release spc (layer-toggle navigation2))
-  rsft_; (tap-hold-next-release 200 ; rsft)
+	e_num1 (tap-hold-next-release 200 e (layer-toggle number1))
+	spc_nav2 (tap-hold-next-release 200 spc (layer-toggle navigation2))
+  rsft_esc (tap-hold-next-release 200 esc rsft)
   ralt_/ (tap-hold-next-release 200 / ralt)
   rctrl_m (tap-hold-next-release 200 m rctrl)
-  lsft_a (tap-hold-next-release 200 a lsft)
-  lalt_z (tap-hold-next-release 200 z lalt)
+  ret_num1 (tap-hold-next-release 200 ret (layer-toggle number1))
+  lsft_z (tap-hold-next-release 200 z lsft)
+  lalt_q (tap-hold-next-release 200 q lalt)
   lctrl_v (tap-hold-next-release 200 v lctrl)
-)
-
-(deflayer default
-	 tab        q    w    e    r    t    y    u    i    o    p   _
-   esc  @lsft_a    s    d    f    g    h    j    k    l    @rsft_; _
-	      @lalt_z    x    c    @lctrl_v    b    n       @rctrl_m    ,    .    @ralt_/
-	      _ tab @esc_num1          @spc_nav2         bspc _ _
-)
-
-(deflayer number1
-	 _  _    _    _    _    _      +    7    8    9    0  _
-   _  _    _    _    _    ~      *    4    5    6    =  _
-	    _    _    _    lctrl    `      &    1    2    3    \
-	    _ _  _           ret         _ _ _
 )
 
 ;; navigation layer aliases for combo keys
 (defalias
-  met_lctl (around met lctl)
+  met_lctrl (around met lctrl)
+  met_rctrl (around met rctrl)
   met_tab (around met tab)
+  met_nav2 (around met (layer-toggle navigation2))
   met_l (around met l)
 )
 
-(deflayer navigation2
-	 _  !    @    {    }    |      _    _    _    _    "   _
-   _  #    $    \(    \)    -    left    down    up    right    '   _
-	    %    ^    [    ]    \_     home    pgdn    pgup    end    _
-	    @met_tab @met_lctl  met         _          _ _ @met_l
+(deflayer default
+	 @lalt_q    w    e    r      t   _   _   _  y    u    i    o    p 
+         a    s    d    f      g   _   _   _  h    j    k    l    @rsft_esc
+	 @lsft_z    x    c @lctrl_v  b   _   _   _  n   @rctrl_m    ,    .    @ralt_/
+	       _   tab @ret_num1     _   _   _   @met_nav2  @spc_nav2   bspc   _ 
+	    _ _  _           _         _  _ _
 )
+
+(deflayer number1
+	 _  _    _    _   _    _    _    _    +    7    8    9    0
+   _    _    _    ~    `   _   _    _   *    4    5    6    =
+	 _  _    _    _   lctrl  _   _    _   &    1    2    3    \
+	    _    _    _  _  _    _   _   esc    _   _
+	    _ _  _           _         _  _ _
+)
+
+(deflayer navigation2
+	 !    @    {    }      |   _    _    _    _       @met_tab   ;  :  "
+   #    $    \(    \)    -   _    _    _    left    down    up    right    '
+	 %    ^    [    ]    \_    _    _    _    pgup    pgdn    home   end    _
+	     _  _  met   _   met   _   _  _   @met_l    _
+	    _ _  _           _         _  _ _
+) 
+
+;; (deflayer default
+;;   _      _    _    _    _    _    _    _    _    _    _  _   _
+;; 	 _    q    w    @e_num1    r    t    y    u    i    o    p   _   _
+;;    esc  @lsft_a    s    d    f    g    h    j    k    l    @rsft_esc   _   _ 
+;; 	      @lalt_z    x    c    @lctrl_v    b    n       @rctrl_m    ,    .    @ralt_/
+;; 	      _ tab @ret_num1         @spc_nav2         bspc _ _
+;; )
+;; 
+;; (deflayer number1
+;;   _      _    _    _    _    _    _    _    _    _    _  _   _
+;; 	 _  _    _    _    _    _      +    7    8    9    0  _   _
+;;    _  _    _    _    ~    `      *    4    5    6    =  _   _
+;; 	    _    _    _    lctrl    _      &    1    2    3    \
+;; 	    _ _  _           esc         esc  _ _
+;; )
+;; 
+;; (deflayer navigation2
+;;  _      _    _    _    _    _    _    _    _    _    _  _   _
+;; 	 _  !    @    {    }    |      @met_tab     _    ;   :    "   _   _
+;;    _  #    $    \(    \)    -    left    down    up    right    '   _
+;; 	    %    ^    [    ]    \_     home    pgdn    pgup    end    _   _
+;; 	   _  @met_lctrl met        _          @met_l _  _
+;; )
+       
