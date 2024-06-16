@@ -1,19 +1,23 @@
 #!/bin/bash
 set -eu -o pipefail
 
-ORIGIP=192.168.180.138
+ORIGIP=192.168.180.170
 USER=bchapman
-for TOMOVE in .aws .bcbio .bashrc.local .bashrc.ginkgo .gnupg .ec2 .keybase .lein .password-store .pypirc .ssh .tarsnap .vpn .vim .offlineimap
-do
-	rsync -rav $USER@$ORIGIP:~/$TOMOVE ~/
-done
+# for TOMOVE in .aws .bcbio .bashrc.local .bashrc.ginkgo .gnupg .ec2 .keybase .lein .password-store .pypirc .ssh .tarsnap .vpn .vim .offlineimap .fzf.bash .fzf
+# do
+# 	rsync -rav $USER@$ORIGIP:~/$TOMOVE ~/
+# done
 
-#rsync -rav $USER@$ORIGIP:personal ~/
-#rsync -rav $USER@$ORIGIP:servers ~/
+#rsync -ravz $USER@$ORIGIP:personal ~/
+#rsync -ravz $USER@$ORIGIP:servers ~/
 #rsync -rav $USER@$ORIGIP:.tmux/resurrect ~/.tmux/
 #rsync -rav $USER@$ORIGIP:.config/msmtp ~/.config/
-#rsync -rav $USER@$ORIGIP:ginkgo ~/
+#rsync -rav $USER@$ORIGIP:.config/gspread ~/.config/
+#rsync -ravz $USER@$ORIGIP:ginkgo ~/
+#rsync -ravz $USER@$ORIGIP:/mnt/work/ginkgo /mnt/work
 #rsync -rav $USER@$ORIGIP:mail ~/
+rsync -rav $USER@$ORIGIP:install/system ~/install
+rsync -rav $USER@$ORIGIP:install/clojure ~/install
 
 
 INDIR=~/transfer

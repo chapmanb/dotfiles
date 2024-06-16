@@ -22,7 +22,7 @@ alias rm='rm -i'
 alias cp='cp -i'
 alias mv='mv -i'
 alias mkdir='mkdir -p'
-export EDITOR=vim
+export EDITOR=nvim
 export PAGER=less
 
 export GIT_SSL_NO_VERIFY=true
@@ -33,7 +33,7 @@ export HISTCONTROL=erasedups
 shopt -s histappend
 export HISTSIZE=10000000
 export HISTFILESIZE=10000000
-export PROMPT_COMMAND='history -a'
+export PROMPT_COMMAND="history -a;$PROMPT_COMMAND"
 __reload_history ()
 [[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
 
@@ -66,6 +66,11 @@ alias sacct_std='sacct -s r -s pd -X --format JobID,JobName,Partition,NNodes,All
 # --- Interactive only commands
 # If not running interactively, stop here
 [[ $- == *i* ]] || return
+
+
+if [ -f /usr/local/bin/aws_completer ]; then
+	complete -C '/usr/local/bin/aws_completer' aws
+fi
 
 # Disable ctrl-s ctrl-q (suspend, resume. frequently really really annoying!)
 # http://geekanova.blogspot.co.uk/2012/11/ctrl-s-freezes-terminal.html
@@ -112,6 +117,37 @@ alias alot=~/.mail/env/bin/alot
 
 # vim python dependencies
 export PATH=$PATH:~/.local/bin
+
+# auto activate virtualenv
+# Modified solution based on https://stackoverflow.com/questions/45216663/how-to-automatically-activate-virtualenvs-when-cding-into-a-directory/56309561#56309561
+function cd() {
+  builtin cd "$@"
+
+  ## Default path to virtualenv in your projects
+  DEFAULT_ENV_PATH="./.venv"
+
+  ## If env folder is found then activate the vitualenv
+  function activate_venv() {
+    if [[ -f "${DEFAULT_ENV_PATH}/bin/activate" ]] ; then
+      source "${DEFAULT_ENV_PATH}/bin/activate"
+      echo "Activating ${VIRTUAL_ENV}"
+    fi
+  }
+
+  if [[ -z "$VIRTUAL_ENV" ]] ; then
+    activate_venv
+  else
+    ## check the current folder belong to earlier VIRTUAL_ENV folder
+    # if yes then do nothing
+    # else deactivate then run a new env folder check
+      parentdir="$(dirname ${VIRTUAL_ENV})"
+      if [[ "$PWD"/ != "$parentdir"/* ]] ; then
+        echo "Deactivating ${VIRTUAL_ENV}"
+        deactivate
+        activate_venv
+      fi
+  fi
+}
 
 # Nix
 #if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi

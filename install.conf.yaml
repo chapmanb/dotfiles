@@ -3,12 +3,13 @@
 - link:
     ~/.bashrc: bashrc
     ~/.inputrc: inputrc
-    ~/.config/liquidpromptrc:
-      create: true
-      path: liquidpromptrc
     ~/.config/flake8: flake8
+    ~/.config/liquidpromptrc:
+       create: true
+       path: liquidpromptrc
     ~/.config/pep8: pep8
     ~/.config/alot: alot
+    ~/.config/black: pyproject.toml
     ~/.config/pip/pip.conf:
       create: true
       path: pip.conf

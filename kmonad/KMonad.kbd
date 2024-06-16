@@ -12,16 +12,16 @@
 	     lctl met  lalt      spc         ralt ssrq rctl
 )
 
-;; Default layout aliases for multi keys
+;; dEfault layout aliases for multi keys
 (defalias
 	e_num1 (tap-hold-next-release 200 e (layer-toggle number1))
 	spc_nav2 (tap-hold-next-release 200 spc (layer-toggle navigation2))
-  rsft_esc (tap-hold-next-release 200 esc rsft)
+  rsft_. (tap-hold-next-release 200 . rsft)
   ralt_/ (tap-hold-next-release 200 / ralt)
   rctrl_m (tap-hold-next-release 200 m rctrl)
   ret_num1 (tap-hold-next-release 200 ret (layer-toggle number1))
-  lsft_z (tap-hold-next-release 200 z lsft)
-  lalt_q (tap-hold-next-release 200 q lalt)
+  lsft_x (tap-hold-next-release 200 x lsft)
+  lalt_z (tap-hold-next-release 200 z lalt)
   lctrl_v (tap-hold-next-release 200 v lctrl)
 )
 
@@ -35,17 +35,17 @@
 )
 
 (deflayer default
-	 @lalt_q    w    e    r      t   _   _   _  y    u    i    o    p 
-         a    s    d    f      g   _   _   _  h    j    k    l    @rsft_esc
-	 @lsft_z    x    c @lctrl_v  b   _   _   _  n   @rctrl_m    ,    .    @ralt_/
+	       q        w    e    r      t   _   _   _  y          u    i         o    p
+         a        s    d    f      g   _   _   _  h          j    k         l    esc
+	 @lalt_z  @lsft_x    c @lctrl_v  b   _   _   _  n   @rctrl_m    ,   @rsft_.    @ralt_/
 	       _   tab @ret_num1     _   _   _   @met_nav2  @spc_nav2   bspc   _ 
 	    _ _  _           _         _  _ _
 )
 
 (deflayer number1
-	 _  _    _    _   _    _    _    _    +    7    8    9    0
-   _    _    _    ~    `   _   _    _   *    4    5    6    =
-	 _  _    _    _   lctrl  _   _    _   &    1    2    3    \
+	 @met_l  _    _    sysrq   _    _    _    _    +    7    8    9    0
+   _       _    _    ~       `   _   _    _   *    4    5    6    =
+	 _       _    _    _       lctrl  _   _    _   &    1    2    3    \
 	    _    _    _  _  _    _   _   esc    _   _
 	    _ _  _           _         _  _ _
 )
@@ -54,7 +54,7 @@
 	 !    @    {    }      |   _    _    _    _       @met_tab   ;  :  "
    #    $    \(    \)    -   _    _    _    left    down    up    right    '
 	 %    ^    [    ]    \_    _    _    _    pgup    pgdn    home   end    _
-	     _  _  met   _   met   _   _  _   @met_l    _
+	     _  _  met   _   met   _   _  _   _    _
 	    _ _  _           _         _  _ _
 ) 
 

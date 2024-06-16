@@ -8,3 +8,5 @@
 
 [includeIf "gitdir:~/ginkgo/code/"]
     path = ~/ginkgo/code/.gitconfig
+[init]
+	defaultBranch = main

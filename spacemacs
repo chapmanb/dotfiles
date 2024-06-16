@@ -12,7 +12,9 @@
    ;; List of configuration layers to load. If it is the symbol `all' instead
    ;; of a list then all discovered layers will be installed.
    dotspacemacs-configuration-layers
-   '(html
+   '(rust
+     javascript
+     html
      csv
      lua
      ;; --------------------------------------------------------
@@ -37,9 +39,10 @@
      (git :variables
           git-magit-status-fullscreen t
           magit-diff-refine-hunk 'all)
-     github
      (helm :variables
            helm-follow-mode-persistent t)
+     (languagetool :variables
+                   langtool-language-tool-jar "/home/bchapman/install/system/languagetool/languagetool-commandline.jar")
      (lsp :variables
           lsp-headerline-breadcrumb-enable nil
           )
@@ -47,12 +50,13 @@
              ;; python-backend 'anaconda
              python-backend 'lsp
              python-lsp-server 'pyright
-             python-formatter 'yapf
-             python-fill-column 120
-             python-format-on-save t
-             python-pipenv-activate t)
+             python-formatter 'black
+             python-fill-column 100
+             python-test-runner '(pytest nose)
+             python-format-on-save nil
+             python-sort-imports-on-save nil)
      markdown
-     notmuch
+     ;; notmuch
      (org :variables
           org-enable-github-support t
           org-enable-roam-support t)
@@ -78,7 +82,8 @@
      ;;        shell-default-height 50
      ;;        shell-default-width 50)
      )
-   dotspacemacs-additional-packages '(all-the-icons)
+   dotspacemacs-additional-packages '(all-the-icons
+                                      (evil-ediff :location (recipe :fetcher github :repo "emacs-evil/evil-ediff")))
    ;; A list of packages and/or extensions that will not be install and loaded.
    dotspacemacs-excluded-packages
    '(helm-c-yasnippet
@@ -192,33 +197,38 @@ before layers configuration."
    dotspacemacs-default-package-repository nil
    )
   ;; User initialization goes here
-
+  (setq org-roam-v2-ack t)
   )
 
 (defun dotspacemacs/user-config ()
   "Configuration function.
  This function is called at the very end of Spacemacs initialization after
 layers configuration."
-  ;; notmuch mail
-  (require 'notmuch)
-  (setq notmuch-fcc-dirs "fastmail/INBOX.Sent")
-  (setq send-mail-function 'sendmail-send-it)
-  (setq sendmail-program "/usr/bin/msmtp")
+  (add-to-list 'exec-path "/mnt/work/ginkgo/env/bin/")
+  ;; ;; notmuch mail
+  ;; (require 'notmuch)
+  ;; (setq notmuch-fcc-dirs "fastmail/INBOX.Sent")
+  ;; (setq send-mail-function 'sendmail-send-it)
+  ;; (setq sendmail-program "/usr/bin/msmtp")
+  ;; (setq mail-host-address "fastmail.com")
+  ;; (setq mail-specify-envelope-from t)
+  ;; (setq mail-envelope-from 'header)
+  ;; (setq message-sendmail-envelope-from 'header)
 
-  (defun notmuch-exec-offlineimap ()
-    (interactive)
-    (set-process-sentinel
-     (start-process-shell-command "offlineimap" "*offlineimap*" "offlineimap -o")
-     '(lambda (process event)
-        (let ((w (get-buffer-window "*offlineimap*")))
-          (when w
-            (with-selected-window w (recenter (window-end)))))))
-    (popwin:display-buffer "*offlineimap*"))
-  ;; (add-to-list 'popwin:special-display-config
-  ;;              '("*offlineimap*" :dedicated t :position bottom :stick t :height 0.3 :noselect t))
-  (define-key notmuch-search-mode-map "," 'notmuch-exec-offlineimap)
-  (define-key notmuch-show-mode-map "d" (lambda () (interactive)
-                                          (notmuch-show-tag notmuch-message-deleted-tags)))
+  ;; (defun notmuch-exec-offlineimap ()
+  ;;   (interactive)
+  ;;   (set-process-sentinel
+  ;;    (start-process-shell-command "offlineimap" "*offlineimap*" "offlineimap -o")
+  ;;    '(lambda (process event)
+  ;;       (let ((w (get-buffer-window "*offlineimap*")))
+  ;;         (when w
+  ;;           (with-selected-window w (recenter (window-end)))))))
+  ;;   (popwin:display-buffer "*offlineimap*"))
+  ;; ;; (add-to-list 'popwin:special-display-config
+  ;; ;;              '("*offlineimap*" :dedicated t :position bottom :stick t :height 0.3 :noselect t))
+  ;; (define-key notmuch-search-mode-map "," 'notmuch-exec-offlineimap)
+  ;; (define-key notmuch-show-mode-map "d" (lambda () (interactive)
+  ;;                                         (notmuch-show-tag notmuch-message-deleted-tags)))
 
   ;; smartparens
   (define-key evil-normal-state-map "\C-c0" 'sp-forward-slurp-sexp)
@@ -343,14 +353,22 @@ This function is called at the very end of Spacemacs initialization."
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
+ '(evil-want-Y-yank-to-eol nil)
  '(package-selected-packages
-   '(lsp-ui lsp-python-ms lsp-pyright lsp-origami origami helm-lsp dap-mode lsp-treemacs bui lsp-mode cfrs posframe xterm-color shell-pop org-gcal request-deferred deferred gntp multi-term lua-mode parent-mode fringe-helper flx highlight transient goto-chg ctable julia-mode eshell-z eshell-prompt-extras esh-help pos-tip paredit lv eval-sexp-fu sesman pkg-info parseedn parseclj a epl anki-editor pythonic f auto-complete popup avy go-mode git-commit async multiple-cursors clojure-mode packed with-editor hydra s dash evil-ediff dumb-jump column-enforce-mode clojure-snippets git-gutter+ diminish company cider anaconda-mode package-build bind-key bind-map evil base16-ocean-theme yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))
- '(paradox-github-token t))
+   '(toml-mode ron-mode racer rust-mode helm-gtags ggtags flycheck-rust counsel-gtags counsel swiper ivy cargo xterm-color shell-pop org-gcal request-deferred deferred gntp multi-term lua-mode parent-mode fringe-helper flx highlight transient goto-chg ctable julia-mode eshell-z eshell-prompt-extras esh-help pos-tip paredit lv eval-sexp-fu sesman pkg-info parseedn parseclj a epl anki-editor pythonic f auto-complete popup avy go-mode git-commit async multiple-cursors clojure-mode packed with-editor hydra s dash evil-ediff dumb-jump column-enforce-mode clojure-snippets git-gutter+ diminish company cider anaconda-mode package-build bind-key bind-map evil base16-ocean-theme yasnippet ess helm helm-core yapfify winum uuidgen unfill thrift powerline py-isort ox-gfm metaweblog xml-rpc org-projectile org-category-capture alert log4e org-mime org-download mwim markdown-mode live-py-mode link-hint dash-functional projectile request go-guru gitignore-mode git-link git-gutter fuzzy flycheck eyebrowse evil-visual-mark-mode evil-unimpaired magit magit-popup ghub let-alist smartparens base16-ocean-dark-theme paradox company-quickhelp yaml-mode xclip ws-butler writegood-mode wolfram-mode window-numbering which-key volatile-highlights vi-tilde-fringe use-package twittering-mode toc-org stan-mode spacemacs-theme spaceline snakemake-mode smooth-scrolling smeargle scad-mode restart-emacs quelpa qml-mode pyvenv python pytest pyenv-mode popwin pip-requirements persp-mode pcre2el page-break-lines orgit org2blog org-repo-todo org-present org-pomodoro org-plus-contrib org-bullets open-junk-file offlineimap notmuch neotree move-text mmm-mode matlab-mode markdown-toc magit-gitflow macrostep lorem-ipsum linum-relative leuven-theme info+ indent-guide ido-vertical-mode hy-mode hungry-delete htmlize hl-todo highlight-parentheses highlight-numbers highlight-indentation help-fns+ helm-themes helm-swoop helm-pydoc helm-projectile helm-mode-manager helm-make helm-gitignore helm-flx helm-descbinds helm-company helm-ag google-translate golden-ratio go-eldoc gnuplot gitconfig-mode gitattributes-mode git-timemachine git-messenger git-gutter-fringe git-gutter-fringe+ gh-md flycheck-pos-tip flx-ido fill-column-indicator fancy-battery expand-region exec-path-from-shell evil-visualstar evil-tutor evil-surround evil-search-highlight-persist evil-numbers evil-nerd-commenter evil-mc evil-matchit evil-magit evil-lisp-state evil-jumper evil-indent-plus evil-iedit-state evil-exchange evil-escape evil-args evil-anzu ess-smart-equals ess-R-object-popup ess-R-data-view elisp-slime-nav diff-hl define-word cython-mode company-statistics company-go company-anaconda clj-refactor clean-aindent-mode cider-eval-sexp-fu buffer-move bracketed-paste base16-theme auto-yasnippet auto-highlight-symbol auto-compile arduino-mode aggressive-indent adaptive-wrap ace-window ace-link ace-jump-helm-line ac-ispell))
+ '(paradox-github-token t)
+ '(safe-local-variable-values
+   '((python-sort-imports-on-save)
+     (python-format-on-save)
+     (javascript-backend . tide)
+     (javascript-backend . tern)
+     (javascript-backend . lsp))))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(company-tooltip-common ((t (:inherit company-tooltip :weight bold :underline nil))))
- '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil)))))
+ '(company-tooltip-common-selection ((t (:inherit company-tooltip-selection :weight bold :underline nil))))
+ '(highlight-parentheses-highlight ((nil (:weight ultra-bold))) t))
 )

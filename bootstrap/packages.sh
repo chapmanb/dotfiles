@@ -9,7 +9,13 @@ sudo apt-get install -y unclutter xdotool xclip xsel dmenu vim-gtk
 
 sudo apt-get install -y git tmux w3m fonts-hack silversearcher-ag ripgrep urlview
 sudo apt-get install -y notmuch libnotmuch5 python3-notmuch offlineimap msmtp pass lastpass-cli
-sudo apt-get install -y python3-setuptools python3-magic python3-configobj python3-urwid python3-urwidtrees python3-gpg python3-venv python3-wheel python3-dev openjdk-11-jdk-headless
+sudo apt-get install -y python3-setuptools python3-magic python3-configobj python3-urwid python3-urwidtrees python3-gpg python3-venv python3-wheel python3-dev openjdk-11-jdk-headless npm
+
+curl -s https://deb.nodesource.com/gpgkey/nodesource.gpg.key | sudo apt-key add -
+sudo sh -c "echo deb https://deb.nodesource.com/node_14.x focal main > /etc/apt/sources.list.d/nodesource.list"
+sudo apt update
+sudo apt install -y nodejs
+sudo npm install --global pyright
 
 sudo add-apt-repository ppa:kelleyk/emacs
 sudo apt-get update
