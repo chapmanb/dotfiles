@@ -3,6 +3,23 @@ if [ -f /etc/bashrc ]; then
 	. /etc/bashrc
 fi
 
+# Load declarative tools and unified CA trust before local overrides.
+if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
+    . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+elif [ -f "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh" ]; then
+    . "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh"
+else
+    # Keep the existing toolchain usable until Home Manager is activated.
+    export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$HOME/.local/share/pnpm:$HOME/.deno/bin:$HOME/.pixi/bin:$PATH"
+    export NVM_DIR="$HOME/.nvm"
+    if [ -s "$NVM_DIR/nvm.sh" ]; then
+        . "$NVM_DIR/nvm.sh"
+    fi
+fi
+
+# Keep agent launchers available without shadowing Nix-provided runtimes.
+export PATH="$PATH:$HOME/.local/bin:$HOME/.bun/bin"
+
 # Load settings from .bashrc.local if it exists
 # This contains passwords and local settings
 if [[ -f $HOME/.bashrc.local ]]; then
@@ -25,7 +42,6 @@ alias mkdir='mkdir -p'
 export EDITOR=nvim
 export PAGER=less
 
-export GIT_SSL_NO_VERIFY=true
 export DEBIAN_FRONTEND=noninteractive
 
 export HISTCONTROL=ignoreboth
@@ -118,12 +134,6 @@ fi
 export LPASS_CLIPBOARD_COMMAND="xclip -selection clipboard -in -l 1"
 export LPASS_AGENT_TIMEOUT=0
 
-# Notmuch mail with alot
-alias alot=~/.mail/env/bin/alot
-
-# vim python dependencies
-export PATH=$PATH:~/.local/bin
-
 # auto activate virtualenv
 # Modified solution based on https://stackoverflow.com/questions/45216663/how-to-automatically-activate-virtualenvs-when-cding-into-a-directory/56309561#56309561
 function cd() {
@@ -155,11 +165,6 @@ function cd() {
   fi
 }
 
-# Nix
-#if [ -e ~/.nix-profile/etc/profile.d/nix.sh ]; then . ~/.nix-profile/etc/profile.d/nix.sh; fi
-#source <(awless completion bash)
-
-
 # WSL (Windows Subsystem for Linux) specific settings.
 if grep -qE "(Microsoft|WSL)" /proc/version &>/dev/null; then
     # Adjustments for WSL's file / folder permission metadata.
@@ -178,26 +183,3 @@ if grep -qE "(Microsoft|WSL)" /proc/version &>/dev/null; then
     # ssh-agent on windows
     eval $(~/windows_home/local/share/ssh-agent-wsl/ssh-agent-wsl -r)
 fi
-
-# pnpm
-export PNPM_HOME="/home/bchapman/.local/share/pnpm"
-case ":$PATH:" in
-  *":$PNPM_HOME:"*) ;;
-  *) export PATH="$PNPM_HOME:$PATH" ;;
-esac
-# pnpm end
-. "/home/bchapman/.deno/env"
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-export PATH="/home/bchapman/.pixi/bin:$PATH"
-
-
-# Added by Antigravity CLI installer
-export PATH="/home/bchapman/.local/bin:$PATH"
-
-# bun
-export BUN_INSTALL="$HOME/.bun"
-export PATH="$BUN_INSTALL/bin:$PATH"
-# homebrew
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"

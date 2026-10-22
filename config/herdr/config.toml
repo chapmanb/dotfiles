@@ -1,0 +1,26 @@
+# herdr config — migrated from ~/.tmux.conf (agent-first).
+# Design notes: ~/ginkgo/code/agent-plans/dotfiles/herdr-migration/plan.md
+# Everything not set here is an intentional herdr default (mouse on, session
+# resume on, new_cwd=follow, pane nav prefix+h/j/k/l, splits prefix+v / prefix+-).
+
+# Skip first-run onboarding (configured explicitly).
+onboarding = false
+
+[keys]
+# Keep the one habit that matters: tmux prefix was C-o.
+prefix = "ctrl+o"
+
+[ui.sound]
+# Shared office — no beeps.
+enabled = false
+
+[ui.toast]
+# Desktop popup when a background agent finishes / needs attention.
+delivery = "system"
+
+[experimental]
+# Non-default: persist pane scrollback to session-history.json so recent pane
+# contents survive a full server restart / reboot (default is false). Caveat:
+# saved output can include secrets/tokens, and alt-screen apps (vim, htop,
+# Claude Code) produce no scrollback to save.
+pane_history = true
