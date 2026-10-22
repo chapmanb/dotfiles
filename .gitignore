@@ -7,6 +7,8 @@ tmux/plugins/tmux-sensible/
 tmux/plugins/tmux-sessionist/
 tmux/plugins/tmux-urlview/
 tmux/plugins/tmux-yank/
+tmux/plugins/tmux-agent-status/
 tmux/resurrect
 w3m
 */__pycache__
+tmp/

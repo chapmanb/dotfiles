@@ -10,3 +10,8 @@
     path = ~/ginkgo/code/.gitconfig
 [init]
 	defaultBranch = main
+[credential "https://gitlab.com"]
+	helper = 
+	helper = !/usr/bin/glab auth git-credential
+[alias]
+	rmsquashed = "!f() { b=\"$1\"; onto=\"${2:-master}\"; base=$(git merge-base \"$onto\" \"$b\") || return 1; syn=$(git commit-tree \"$(git rev-parse \"$b^{tree}\")\" -p \"$base\" -m _); case \"$(git cherry \"$onto\" \"$syn\")\" in -*) git branch -D \"$b\" ;; *) echo \"REFUSED: '$b' has changes not in '$onto'\"; return 1 ;; esac; }; f"

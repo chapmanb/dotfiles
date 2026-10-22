@@ -37,6 +37,12 @@ export PROMPT_COMMAND="history -a;$PROMPT_COMMAND"
 __reload_history ()
 [[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
 
+# Disable Ctrl-Z job-control suspend (accidental presses were stopping TUI sessions)
+[[ $- == *i* ]] && stty susp undef
+
+# Reload git completion after fzf, which otherwise clobbers `git` with fuzzy path completion
+[ -f /usr/share/bash-completion/completions/git ] && . /usr/share/bash-completion/completions/git
+
 shopt -s checkwinsize
 
 # bcbio
@@ -172,3 +178,26 @@ if grep -qE "(Microsoft|WSL)" /proc/version &>/dev/null; then
     # ssh-agent on windows
     eval $(~/windows_home/local/share/ssh-agent-wsl/ssh-agent-wsl -r)
 fi
+
+# pnpm
+export PNPM_HOME="/home/bchapman/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+# pnpm end
+. "/home/bchapman/.deno/env"
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+export PATH="/home/bchapman/.pixi/bin:$PATH"
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/bchapman/.local/bin:$PATH"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"
+# homebrew
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv bash)"
