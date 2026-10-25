@@ -46,6 +46,13 @@ Dotbot's `install` entrypoint and configuration, along with retired legacy
 configs, are removed. The dormant `dotbot` submodule and `.gitmodules` are left
 untouched so patches apply cleanly across worktrees.
 
+## Cache cleanup
+
+`bin/cold-archive prune-caches` previews removal of `.dotfiles/tmp` and agent-plan
+`scratch`/`repos` directories; deletion requires `--execute --confirm`.
+It leaves uv caches untouched. Use `uv cache prune` separately to reclaim unused
+uv cache entries without deleting the entire cache.
+
 ## Offline checks
 
 ```sh

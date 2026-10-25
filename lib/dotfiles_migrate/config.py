@@ -50,7 +50,7 @@ class ArchivePolicy:
 
     def cache_targets(self):
         plans = self.code_root / "agent-plans"
-        targets = [self.home / ".cache/uv", self.home / ".dotfiles/tmp"]
+        targets = [self.home / ".dotfiles/tmp"]
         for name in ("scratch", "repos"):
             targets.extend(sorted(plans.glob(f"*/*/{name}")))
         return [path for path in targets if path.exists() or path.is_symlink()]

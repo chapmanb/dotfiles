@@ -498,7 +498,7 @@ class TestColdArchive(unittest.TestCase):
 
     def test_prune_caches_removes_only_regenerable_cache_and_scratch_trees(self):
         plans = self.code / "agent-plans"
-        targets = [self.home / ".cache/uv", self.home / ".dotfiles/tmp"]
+        targets = [self.home / ".dotfiles/tmp"]
         for project in ("one", "two"):
             targets += [plans / project / "ticket/scratch", plans / project / "ticket/repos"]
         for target in targets:
@@ -507,6 +507,7 @@ class TestColdArchive(unittest.TestCase):
             plans / "one/ticket/spec.md", plans / "one/ticket/CONTEXT.md",
             plans / "one/ticket/docs/adr/0001.md", plans / "two/ticket/DECISIONS.md",
             self.home / ".dotfiles/bashrc", self.home / ".cache/other/retained",
+            self.home / ".cache/uv/nested/cache.bin", self.home / ".uv/cache/nested/cache.bin",
         ]
         for path in protected:
             self.file(path, "keep byte-for-byte")
@@ -585,7 +586,7 @@ class TestColdArchive(unittest.TestCase):
     def test_symlink_cache_targets_are_refused_without_touching_destination(self):
         outside = self.root / "important"
         self.file(outside / "spec.md", "keep")
-        target = self.home / ".cache/uv"
+        target = self.home / ".dotfiles/tmp"
         target.parent.mkdir(parents=True)
         target.symlink_to(outside, target_is_directory=True)
         code, _, error = self.cli("prune-caches", "--execute", "--confirm")
