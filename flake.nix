@@ -19,11 +19,53 @@
             inherit system;
             config.allowUnfree = true;
           };
+          snowflakePyPkgs = unstable.python314Packages.overrideScope (pyFinal: pyPrev: {
+            click = pyPrev.click.overridePythonAttrs (old: {
+              version = prev.python312Packages.click.version;
+              src = prev.python312Packages.click.src;
+              build-system = [ pyFinal.setuptools ];
+              doCheck = false;
+            });
+            typer = pyPrev.typer.overridePythonAttrs (old: {
+              version = "0.17.3";
+              src = unstable.fetchFromGitHub {
+                owner = "fastapi";
+                repo = "typer";
+                tag = "0.17.3";
+                hash = "sha256-ir4RL1Cdq0ENr0ojiJvrdFaZHb4bF8q4rLcKeowliR0=";
+              };
+              dependencies = (old.dependencies or []) ++ [ pyFinal.click pyFinal.typing-extensions ];
+              postPatch = "";
+              doCheck = false;
+            });
+            snowflake-connector-python = pyPrev.snowflake-connector-python.overridePythonAttrs (old: {
+              doCheck = false;
+              dependencies = (old.dependencies or []) ++ [ pyFinal.boto3 pyFinal.botocore ];
+            });
+            snowflake-core = pyPrev.snowflake-core.overridePythonAttrs { doCheck = false; };
+          });
         in {
           inherit unstable;
           inherit (unstable)
-            neovim wezterm uv pixi bun nodejs_24 deno pnpm ruff pyright
+            neovim wezterm uv pixi bun nodejs_24 python315 deno pnpm ruff pyright
             rclone restic glab brave google-chrome;
+          snowflake-cli = (unstable.snowflake-cli.override {
+            python3Packages = snowflakePyPkgs;
+          }).overridePythonAttrs (old: rec {
+            version = "3.31.0";
+            src = unstable.fetchFromGitHub {
+              owner = "snowflakedb";
+              repo = "snowflake-cli";
+              tag = "v${version}";
+              hash = "sha256-VMoyGwDI/RL7ZkIfOU2ftZoKaUcI/+/54o0xtjhMBLQ=";
+            };
+            patches = [];
+            dependencies = old.dependencies ++ (with snowflakePyPkgs; [
+              click configobj jaraco-context keyring protobuf python-dotenv websocket-client
+            ]);
+            pythonRemoveDeps = [ "snowflake-snowpark-python" ];
+            doCheck = false;
+          });
         };
       pkgs = import nixpkgs {
         inherit system;

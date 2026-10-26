@@ -11,14 +11,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 UNSTABLE_PACKAGES = {
-    "neovim", "wezterm", "uv", "pixi", "bun", "nodejs_24", "deno", "pnpm",
+    "neovim", "wezterm", "uv", "pixi", "bun", "nodejs_24", "python315", "deno", "pnpm",
     "ruff", "pyright", "rclone", "restic", "glab", "brave", "google-chrome",
 }
 HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
-    "neovim", "wezterm", "tmux", "awscli2", "babashka", "clojure", "leiningen",
+    "neovim", "wezterm", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
-    "nodejs_24", "python312", "uv", "pixi", "bun", "deno", "pnpm",
+    "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
 }
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {

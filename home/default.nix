@@ -11,9 +11,9 @@ in {
   # Nix owns tools and base runtimes; project environments and agents stay mutable.
   home.packages = with pkgs; [
     ripgrep fd bat fzf jq rclone restic pkgs.unstable.zstd git glab neovim wezterm tmux
-    awscli2 babashka clojure leiningen ruff pyright tree-sitter
+    awscli2 snowflake-cli babashka clojure leiningen ruff pyright tree-sitter
     xclip wl-clipboard pass gnupg
-    nodejs_24 python312 uv pixi bun deno pnpm
+    nodejs_24 python315 uv pixi bun deno pnpm
   ];
 
   home.file = {
