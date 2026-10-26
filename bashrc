@@ -3,6 +3,11 @@ if [ -f /etc/bashrc ]; then
 	. /etc/bashrc
 fi
 
+if [ -e /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+    . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+fi
+export NIX_CONFIG="${NIX_CONFIG:-experimental-features = nix-command flakes}"
+
 # Load declarative tools and unified CA trust before local overrides.
 if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
     . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
