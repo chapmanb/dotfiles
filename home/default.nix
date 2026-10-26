@@ -54,6 +54,7 @@ in {
     Service = {
       Type = "oneshot";
       ExecStart = "/home/bchapman/.dotfiles/bin/daily-backup run";
+      ExecStartPost = "/home/bchapman/.dotfiles/bin/nightly-maintenance";
       # User services do not read bashrc or Home Manager's shell session script.
       Environment = lib.mapAttrsToList (name: value: "${name}=${value}")
         (config.home.sessionVariables // {
@@ -64,9 +65,9 @@ in {
   };
 
   systemd.user.timers.dotfiles-daily-backup = {
-    Unit.Description = "Run the hybrid backup daily, including missed runs";
+    Unit.Description = "Run the hybrid backup and nightly maintenance at 10pm Eastern";
     Timer = {
-      OnCalendar = "daily";
+      OnCalendar = "*-*-* 22:00:00 America/New_York";
       Persistent = true;
       Unit = "dotfiles-daily-backup.service";
     };

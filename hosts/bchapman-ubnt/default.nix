@@ -87,4 +87,16 @@
     ../../certs/trust_C5091132E9ADF8AD3E33932AE60A5C8FA939E824.crt
   ];
   security.pki.caCertificateBlacklist = [ "emSign Root CA - G1" "emSign ECC Root CA - G3" ];
+
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (subject.isInGroup("wheel") && (
+        action.id == "org.freedesktop.login1.power-off" ||
+        action.id == "org.freedesktop.login1.power-off-multiple-sessions" ||
+        action.id == "org.freedesktop.login1.power-off-ignore-inhibit"
+      )) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
 }
