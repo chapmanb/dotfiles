@@ -458,8 +458,9 @@ class TestDailyBackup(unittest.TestCase):
         self.file(code / "agent-plans/deep/plan/scratch/worktree/source.py")
         self.file(code / "agent-plans/deep/plan/repos/clone/.git/HEAD")
         for relative in (".dotfiles/tmp", ".codex/packages", ".pi/agent/npm", ".pi/agent/git",
-                         ".pi/agent/sessions", ".pi/agent/web-search-cache", "bio", "ginkgo/guild"):
-            self.file(self.home / relative / "junk")
+                         ".pi/agent/sessions", ".pi/agent/web-search-cache", "bio", "ginkgo/guild",
+                         "ginkgo/code/acs-mirror-local", "ginkgo/code/hamilton-ultimate"):
+            self.file(self.home / relative / "junk", timestamp=NEW)
         self.file(self.home / ".claude.backup")
 
         result = self.ok("run")
@@ -483,6 +484,7 @@ class TestDailyBackup(unittest.TestCase):
             self.assertIn(str(active / artifact), self.runner.exclusion_text.splitlines())
         for relative in (".dotfiles/tmp", ".codex/packages", ".pi/agent/npm", ".pi/agent/git",
                          ".pi/agent/sessions", ".pi/agent/web-search-cache", "bio", "ginkgo/guild",
+                         "ginkgo/code/acs-mirror-local", "ginkgo/code/hamilton-ultimate",
                          "ginkgo/code/agent-plans/deep/plan/scratch",
                          "ginkgo/code/agent-plans/deep/plan/repos"):
             self.assertIn(str(self.home / relative), self.runner.exclusion_text.splitlines())

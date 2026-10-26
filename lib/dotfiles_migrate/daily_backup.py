@@ -30,10 +30,12 @@ SNAPSHOT_ROOTS = (
     ".claude.json", ".codex", ".pi/agent", ".gemini", ".config/herdr", ".config/nvim",
     ".config/msmtp", ".config/gspread", ".config/rclone", ".config/autostart",
 )
+EXCLUDED_CODE_REPOS = frozenset({"acs-mirror-local", "hamilton-ultimate"})
 PRIVATE_EXCLUSIONS = (
     ".dotfiles/tmp", ".codex/packages", ".pi/agent/npm", ".pi/agent/git",
     ".pi/agent/sessions", ".pi/agent/web-search-cache", ".cache", ".local/share/pnpm",
     ".bun", ".nvm", "bio", "ginkgo/guild",
+    "ginkgo/code/acs-mirror-local", "ginkgo/code/hamilton-ultimate",
 )
 
 
@@ -204,7 +206,7 @@ class DailyBackup:
         code = self.home / "ginkgo/code"
         if code.exists():
             for project in sorted(code.iterdir()):
-                if not project.is_dir() or project.is_symlink():
+                if not project.is_dir() or project.is_symlink() or project.name in EXCLUDED_CODE_REPOS:
                     continue
                 if project.name == "agent-plans":
                     paths.append(project)
