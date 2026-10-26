@@ -69,10 +69,18 @@ shopt -s checkwinsize
 # bcbio
 unset JAVA_HOME
 if [ -d "$BCBIO" ]; then
-    export PATH=$BCBIO/bin:$PATH
+    if [ "$BCBIO" != "/usr/local" ]; then
+        export PATH=$BCBIO/bin:$PATH
+    fi
     #export LD_LIBRARY_PATH=$BCBIO/lib:$LD_LIBRARY_PATH
     #export PERL5LIB=$BCBIO/lib/perl5:${PERL5LIB}
     alias bcbio_anaconda="$BCBIO/share/bcbio_nextgen/anaconda/bin/anaconda"
+fi
+
+if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
+    export PATH="$HOME/.nix-profile/bin:$PATH"
+elif [ -f "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh" ]; then
+    export PATH="/etc/profiles/per-user/$USER/bin:$PATH"
 fi
 
 # Custom aliases
