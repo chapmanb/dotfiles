@@ -225,8 +225,14 @@ class DailyBackup:
                 continue
             for root, directories, files in os.walk(source, followlinks=False, onerror=warn_unreadable):
                 root = Path(root)
+                if root != source and ("pyvenv.cfg" in files or "CACHEDIR.TAG" in files):
+                    paths.add(root)
+                    directories[:] = []
+                    continue
                 kept = []
                 for name in sorted(directories + files):
+                    if name == ".git":
+                        continue
                     path = root / name
                     if path in paths or excluded(Path(source.name) / path.relative_to(source)):
                         paths.add(path)
