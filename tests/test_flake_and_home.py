@@ -60,7 +60,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertEqual(set(overlay.group(1).split()), UNSTABLE_PACKAGES)
         self.assertRegex(
             flake,
-            r'homeConfigurations\."bchapman@bchapman-ubnt" = home-manager\.lib\.homeManagerConfiguration\s*\{\s*inherit pkgs;\s*modules = \[\s*./home\s*\{ targets.genericLinux.enable = true; \}\s*\];',
+            r'homeConfigurations\."bchapman@bchapman-ubnt" = home-manager\.lib\.homeManagerConfiguration\s*\{\s*inherit pkgs;\s*modules = \[\s*./home\s*\{\s*targets.genericLinux.enable = true;[^}]*\}\s*\];',
         )
         self.assertRegex(
             flake,
@@ -72,6 +72,14 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("home-manager.useUserPackages = true;", flake)
         self.assertIn("home-manager.users.bchapman = import ./home;", flake)
         self.assertEqual(flake.count("config.allowUnfree = true;"), 3)
+
+    def test_ubuntu_uses_native_mime_database(self):
+        flake = (ROOT / "flake.nix").read_text()
+        standalone = flake.split('homeConfigurations."bchapman@bchapman-ubnt" =', 1)[1]
+        standalone, nixos = standalone.split("nixosConfigurations.bchapman-ubnt =", 1)
+        self.assertIn("xdg.mime.enable = false;", standalone)
+        self.assertNotIn("xdg.mime.enable", nixos)
+        self.assertNotIn("xdg.mime.enable", (ROOT / "home/default.nix").read_text())
 
     def test_home_manager_symlinks_packages_ca_vars_and_backup_timer(self):
         home = (ROOT / "home/default.nix").read_text()

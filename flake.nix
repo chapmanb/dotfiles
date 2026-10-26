@@ -79,7 +79,12 @@
         inherit pkgs;
         modules = [
           ./home
-          { targets.genericLinux.enable = true; }
+          {
+            targets.genericLinux.enable = true;
+            # Ubuntu's older GIO recurses indefinitely when native and newer
+            # Nix MIME inheritance definitions are combined. Use the host database.
+            xdg.mime.enable = false;
+          }
         ];
       };
 
