@@ -28,6 +28,7 @@ in {
     ".config/nvim/nvim-pack-lock.json".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nvim/nvim-pack-lock.json";
     ".wezterm.lua".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/wezterm/wezterm.lua";
     ".config/herdr/config.toml".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/herdr/config.toml";
+    ".config/home-manager".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}";
     ".config/nix/nix.conf".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nix/nix.conf";
     ".config/liquidpromptrc".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/liquidpromptrc";
     ".datomic/dev-local.edn".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/datomic/dev-local.edn";
