@@ -98,7 +98,7 @@
             nixpkgs.overlays = [ unstableOverlay ];
             home-manager.useGlobalPkgs = true;
             home-manager.useUserPackages = true;
-            home-manager.users.bchapman = import ./home;
+            home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];
           }
         ];
       };

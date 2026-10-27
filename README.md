@@ -46,6 +46,38 @@ Dotbot's `install` entrypoint and configuration, along with retired legacy
 configs, are removed. The dormant `dotbot` submodule and `.gitmodules` are left
 untouched so patches apply cleanly across worktrees.
 
+## NixOS default terminal
+
+Ghostty is installed from the pinned unstable package set. The NixOS Home Manager
+configuration launches it at GNOME login, binds **Ctrl+Alt+T**, and sets `TERMINAL`,
+GNOME's terminal preference, and the `xdg-terminal-exec` preference to Ghostty.
+GNOME Terminal remains installed as a manual fallback (`gnome-terminal`). Apps
+with their own terminal setting or a hard-coded launcher may still need their
+own configuration; GNOME does not have one universal terminal default.
+
+Desktop integration is imported only by the NixOS output, not standalone Ubuntu
+Home Manager. It replaces the known legacy autostart file with a disabled entry
+and adds a Ghostty entry, leaving other login applications alone. Before the
+first activation, back up the old file **in a host terminal outside pibox**:
+
+```sh
+cp -n ~/.config/autostart/gnome-terminal.desktop \
+  ~/.config/autostart/gnome-terminal.desktop.before-ghostty
+sudo nixos-rebuild switch --flake '/home/bchapman/.dotfiles#bchapman-ubnt'
+```
+
+Full-system evaluation currently fails on the existing Cisco VPN service's
+unsupported `requiresMountsFor` option in `hosts/bchapman-ubnt/cisco-vpn.nix`.
+Correct that separate host configuration issue before rebuilding; the Ghostty
+Home Manager configuration itself builds successfully.
+
+After a successful rebuild, log out and back into GNOME. Check that only Ghostty opens automatically,
+**Ctrl+Alt+T** opens Ghostty, and `gnome-terminal` still works manually. The shared
+home directory means NixOS activation changes shared files; reapply standalone
+Home Manager if returning to Ubuntu. Reverting the configuration commit and
+rebuilding restores the prior declarative configuration; restore the backup
+above if you also want the unmanaged GNOME Terminal login entry back.
+
 ## Cache cleanup
 
 `bin/cold-archive prune-caches` previews removal of `.dotfiles/tmp` and agent-plan

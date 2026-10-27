@@ -16,7 +16,7 @@ UNSTABLE_PACKAGES = {
 }
 HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
-    "neovim", "wezterm", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
+    "neovim", "wezterm", "pkgs.unstable.ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
     "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
 }
@@ -70,8 +70,39 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("nixpkgs.overlays = [ unstableOverlay ];", flake)
         self.assertIn("home-manager.useGlobalPkgs = true;", flake)
         self.assertIn("home-manager.useUserPackages = true;", flake)
-        self.assertIn("home-manager.users.bchapman = import ./home;", flake)
+        self.assertIn("home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];", flake)
         self.assertEqual(flake.count("config.allowUnfree = true;"), 3)
+
+    def test_ghostty_nixos_desktop_integration(self):
+        home = (ROOT / "home/default.nix").read_text()
+        flake = (ROOT / "flake.nix").read_text()
+        desktop = (ROOT / "home/ghostty.nix").read_text()
+        standalone, nixos = flake.split("nixosConfigurations.bchapman-ubnt =", 1)
+        self.assertIn("pkgs.unstable.ghostty", home)
+        self.assertNotIn("./home/ghostty.nix", standalone)
+        self.assertIn("home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];", nixos)
+        self.assertIn("home.packages = [ pkgs.gnome-terminal pkgs.xdg-terminal-exec ];", desktop)
+        self.assertNotIn("excludePackages", (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
+        self.assertIn('ghostty = "${pkgs.unstable.ghostty}/bin/ghostty";', desktop)
+        self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
+        self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
+        self.assertIn("exec = ghostty;", desktop)
+        self.assertIn('exec-arg = "-e";', desktop)
+        self.assertIn('"xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\\n";', desktop)
+        self.assertIn("custom-keybindings = lib.mkAfter [", desktop)
+        self.assertIn('"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty/"', desktop)
+        self.assertIn('"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty"', desktop)
+        self.assertIn('binding = "<Primary><Alt>t";', desktop)
+        self.assertIn("command = ghostty;", desktop)
+        legacy, login = desktop.split('"autostart/com.mitchellh.ghostty.desktop".text =', 1)
+        legacy = legacy.split('"autostart/gnome-terminal.desktop" =', 1)[1]
+        self.assertIn("force = true;", legacy)
+        self.assertIn("Hidden=true", legacy)
+        for line in ("Type=Application", "Exec=${ghostty}", "TryExec=${ghostty}",
+                     "Terminal=false", "OnlyShowIn=GNOME;", "X-GNOME-Autostart-enabled=true"):
+            self.assertIn(line, login)
+        self.assertNotIn("Hidden=true", login)
+        self.assertNotIn("/usr/bin/gnome-terminal", desktop)
 
     def test_ubuntu_uses_native_mime_database(self):
         flake = (ROOT / "flake.nix").read_text()
