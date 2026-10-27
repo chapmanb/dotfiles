@@ -101,6 +101,14 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.load_verify_locations(cafile=str(ROOT / "certs" / certificate))
 
+    def test_cisco_fhs_requires_absolute_browser_launcher(self):
+        vpn = (ROOT / "hosts/bchapman-ubnt/cisco-vpn.nix").read_text()
+        target = re.search(r"targetPkgs\s*=\s*p:\s*with p;\s*\[(.*?)\];", vpn, re.S)
+        self.assertIsNotNone(target)
+        packages = re.sub(r"#.*", "", target.group(1)).split()
+        self.assertIn("xdg-utils", packages)
+        self.assertIn('test -x "$out/usr/bin/xdg-open"', vpn)
+
     def test_cisco_vpn_module_and_workspace_bind_mounts(self):
         vpn = (ROOT / "hosts/bchapman-ubnt/cisco-vpn.nix").read_text()
         for declaration in (

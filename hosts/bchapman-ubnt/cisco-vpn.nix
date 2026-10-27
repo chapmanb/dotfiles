@@ -9,7 +9,15 @@ let
       pango cairo gdk-pixbuf dbus nss nspr libsecret libcap libxcrypt-legacy
       xorg.libX11 xorg.libXext xorg.libXi xorg.libXrender xorg.libXtst
       xorg.libXrandr xorg.libxcb mesa alsa-lib systemd coreutils iproute2
+      # Cisco's SSO helper executes /usr/bin/xdg-open directly, not through PATH.
+      xdg-utils
     ];
+    extraBuildCommands = ''
+      if ! test -x "$out/usr/bin/xdg-open"; then
+        echo "Cisco SSO requires executable /usr/bin/xdg-open in the FHS root" >&2
+        exit 1
+      fi
+    '';
     extraBwrapArgs = [ "--bind /opt/cisco /opt/cisco" ];
     runScript = pkgs.writeShellScript "cisco-exec" ''
       export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
