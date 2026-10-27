@@ -1,20 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Step 2: Check, update, and sync acs-mirror
-cd "$HOME/ginkgo/code/acs-mirror"
-uv run acs-mirror check
-uv run acs-mirror update
-uv run acs-mirror sync
+sync_acs_mirror() {
+    cd "$HOME/ginkgo/code/acs-mirror" &&
+        uv run acs-mirror check &&
+        uv run acs-mirror update &&
+        uv run acs-mirror sync
+}
 
-# Step 3: Pull latest master in acs-scheduler
-cd "$HOME/ginkgo/code/acs-scheduler"
-git pull origin master
+pull_acs_scheduler() {
+    cd "$HOME/ginkgo/code/acs-scheduler" &&
+        git pull origin master
+}
+
+shutdown_if_nightly_window() {
+    local hour
+    hour=$(TZ="America/New_York" date +%H)
+    if [ "$((10#$hour))" -ge 21 ] || [ "$((10#$hour))" -lt 4 ]; then
+        systemctl poweroff -i || dbus-send --system --print-reply \
+            --dest=org.freedesktop.login1 /org/freedesktop/login1 \
+            org.freedesktop.login1.Manager.PowerOff boolean:false
+    fi
+}
+
+# Step 2: Check, update, and sync acs-mirror (best-effort when off VPN)
+if ! sync_acs_mirror; then
+    echo "nightly-maintenance: acs-mirror sync failed; continuing to remaining steps" >&2
+fi
+
+# Step 3: Pull latest master in acs-scheduler (best-effort when off VPN)
+if ! pull_acs_scheduler; then
+    echo "nightly-maintenance: acs-scheduler pull failed; continuing to shutdown" >&2
+fi
 
 # Step 4: Shut down the system during the nightly window (21:00-04:00 America/New_York)
-hour=$(TZ="America/New_York" date +%H)
-if [ "$((10#$hour))" -ge 21 ] || [ "$((10#$hour))" -lt 4 ]; then
-    systemctl poweroff -i || dbus-send --system --print-reply \
-        --dest=org.freedesktop.login1 /org/freedesktop/login1 \
-        org.freedesktop.login1.Manager.PowerOff boolean:false
-fi
+shutdown_if_nightly_window

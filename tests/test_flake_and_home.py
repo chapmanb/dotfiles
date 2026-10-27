@@ -201,6 +201,71 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertTrue((ROOT / ".gitmodules").is_file())
         self.assertTrue((ROOT / "dotbot").is_dir())
 
+    def test_nightly_maintenance_continues_to_shutdown_when_repo_sync_fails(self):
+        script = ROOT / "bin/nightly-maintenance"
+        subprocess.run(["bash", "-n", str(script)], check=True)
+        with tempfile.TemporaryDirectory(prefix="test-nightly-maintenance-") as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            (home / "ginkgo/code/acs-mirror").mkdir(parents=True)
+            (home / "ginkgo/code/acs-scheduler").mkdir(parents=True)
+            bindir = root / "bin"
+            bindir.mkdir()
+            log = root / "calls.log"
+
+            for name, body in (
+                ("uv", 'echo "uv $*" >> "$CALL_LOG"\n'
+                       'if [ "${FAIL_UV:-0}" = "1" ]; then exit 1; fi\n'),
+                ("git", 'echo "git $*" >> "$CALL_LOG"\n'
+                        'if [ "${FAIL_GIT:-0}" = "1" ]; then exit 1; fi\n'),
+                ("date", 'echo "${FAKE_HOUR:-22}"\n'),
+                ("systemctl", 'echo "systemctl $*" >> "$CALL_LOG"\n'),
+                ("dbus-send", 'echo "dbus-send $*" >> "$CALL_LOG"\n'),
+            ):
+                stub = bindir / name
+                stub.write_text("#!/usr/bin/env bash\n" + body)
+                stub.chmod(0o755)
+
+            base_env = {
+                "HOME": str(home),
+                "PATH": f"{bindir}:/usr/bin:/bin",
+                "CALL_LOG": str(log),
+            }
+
+            # Off-VPN failure in acs-mirror check skips update/sync, still attempts git pull and powers off at 22:00.
+            result = subprocess.run(
+                [str(script)],
+                env={**base_env, "FAIL_UV": "1", "FAIL_GIT": "1", "FAKE_HOUR": "22"},
+                check=True, text=True, capture_output=True,
+            )
+            self.assertIn("acs-mirror sync failed", result.stderr)
+            self.assertIn("acs-scheduler pull failed", result.stderr)
+            self.assertEqual(
+                log.read_text().splitlines(),
+                [
+                    "uv run acs-mirror check",
+                    "git pull origin master",
+                    "systemctl poweroff -i",
+                ],
+            )
+
+            # Daytime catch-up run (10:00) performs all sync steps and skips poweroff.
+            log.unlink()
+            subprocess.run(
+                [str(script)],
+                env={**base_env, "FAKE_HOUR": "10"},
+                check=True, text=True, capture_output=True,
+            )
+            self.assertEqual(
+                log.read_text().splitlines(),
+                [
+                    "uv run acs-mirror check",
+                    "uv run acs-mirror update",
+                    "uv run acs-mirror sync",
+                    "git pull origin master",
+                ],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
