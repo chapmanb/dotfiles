@@ -3,7 +3,7 @@
 let
   ghostty = "${pkgs.unstable.ghostty}/bin/ghostty";
 in {
-  home.packages = [ pkgs.gnome-terminal pkgs.xdg-terminal-exec ];
+  home.packages = [ pkgs.xdg-terminal-exec ];
   home.sessionVariables.TERMINAL = ghostty;
 
   dconf.settings = {
@@ -18,6 +18,16 @@ in {
       name = "Ghostty";
       command = ghostty;
       binding = "<Primary><Alt>t";
+    };
+  };
+
+  xdg.mimeApps = {
+    enable = true;
+    defaultApplications = {
+      "x-scheme-handler/http" = [ "brave-browser.desktop" ];
+      "x-scheme-handler/https" = [ "brave-browser.desktop" ];
+      "text/html" = [ "brave-browser.desktop" ];
+      "application/xhtml+xml" = [ "brave-browser.desktop" ];
     };
   };
 

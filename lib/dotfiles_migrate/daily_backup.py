@@ -26,7 +26,7 @@ BROWSABLE_ROOTS = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods",
 SNAPSHOT_ROOTS = (
     ".dotfiles", ".ssh", ".gnupg", ".password-store", ".aws", ".kube", ".vpn",
     ".snowflake", ".dbt", ".pypirc", ".bashrc.local", ".bashrc.ginkgo", "secrets.env",
-    "todo.txt", "notes.txt", ".wezterm.lua", ".spacemacs.env", ".agents", ".claude",
+    "todo.txt", "notes.txt", ".spacemacs.env", ".agents", ".claude",
     ".claude.json", ".codex", ".pi/agent", ".gemini", ".config/herdr", ".config/nvim",
     ".config/msmtp", ".config/gspread", ".config/rclone", ".config/autostart",
 )

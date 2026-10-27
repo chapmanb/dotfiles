@@ -47,7 +47,7 @@
         in {
           inherit unstable;
           inherit (unstable)
-            neovim wezterm uv pixi bun nodejs_24 python315 deno pnpm ruff pyright
+            neovim uv pixi bun nodejs_24 python315 deno pnpm ruff pyright
             rclone restic glab brave google-chrome;
           snowflake-cli = (unstable.snowflake-cli.override {
             python3Packages = snowflakePyPkgs;
@@ -79,6 +79,7 @@
         inherit pkgs;
         modules = [
           ./home
+          ./home/ghostty.nix
           {
             targets.genericLinux.enable = true;
             # Ubuntu's older GIO recurses indefinitely when native and newer

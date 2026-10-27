@@ -2,6 +2,7 @@
 
 import contextlib
 from datetime import datetime, timedelta, timezone
+import errno
 import io
 import json
 from pathlib import Path
@@ -12,8 +13,10 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+import shutil
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
+from dotfiles_migrate import gatekeeper
 from dotfiles_migrate.gatekeeper import main
 
 
@@ -35,25 +38,78 @@ ASSETS = ("bin/vpnagentd", "bin/vpn", "bin/vpnui", "bin/acwebhelper",
 
 
 class OfflineRunner:
-    def __init__(self):
+    def __init__(self, root, source, activation):
+        self.root = root
+        self.source = source
+        self.activation = activation
         self.calls = []
         self.fail_build = False
-        self.mounts = []
+        self.inactive_service = None
+        self.purge_output = ""
+        self.autoremove_output = ""
+        self.late_autoremove_output = ""
+        self.purged = False
+        self.packages = "snapd\tii \nmysql-server-8.0\tii \ngh\tii \nold-config\trc \nubuntu-desktop\tii \n"
 
     def run(self, args):
         args = list(map(str, args))
         self.calls.append(args)
-        if args[0] in ("nix", "nixos-rebuild"):
+        output = ""
+        if args[:2] == ["nix", "eval"]:
+            output = str(self.source)
+        elif args[:2] == ["nix", "build"]:
             if self.fail_build:
                 raise subprocess.CalledProcessError(1, args, stderr="private failure")
-            output = ""
-        elif args == ["findmnt", "--json", "--output", "SOURCE,TARGET"]:
-            output = json.dumps({"filesystems": self.mounts})
-        elif args[0] == "mv":
-            output = ""
+            output = str(self.activation) + "\n"
+        elif args[:2] == ["systemctl", "is-active"]:
+            output = "inactive" if args[2] == self.inactive_service else "active\n"
+        elif args[0] == "dpkg-query":
+            output = self.packages
+        elif args[:2] == ["apt-get", "-s"]:
+            if args[2] == "purge":
+                output = self.purge_output
+            elif args[2] == "autoremove":
+                output = self.late_autoremove_output if self.purged else self.autoremove_output
+            elif args[2] != "install":
+                raise AssertionError(args)
+        elif args == ["snap", "list", "--all"]:
+            output = ("Name Version Rev Tracking Publisher Notes\n"
+                      "core20 1 12 latest canonical base\n"
+                      "snapd 1 13 latest canonical snapd\n"
+                      "firefox 1 14 latest mozilla -\n"
+                      "firefox 1 15 latest mozilla disabled\n"
+                      "gnome-3-38-2004 1 16 latest canonical -\n")
+        elif args[:2] == ["systemctl", "list-units"]:
+            output = "mysql.service loaded active running MySQL\nvpnagentd.service loaded active running Cisco\n"
+        elif args[:2] == ["sudo", "install"]:
+            source, destination = map(Path, args[-2:])
+            self.assert_sandbox(destination)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+        elif args[:2] == ["sudo", "rm"]:
+            for name in args[args.index("--") + 1:]:
+                path = Path(name)
+                self.assert_sandbox(path)
+                if path.is_symlink() or not path.is_dir():
+                    path.unlink(missing_ok=True)
+                else:
+                    shutil.rmtree(path)
+        elif args[:3] == ["sudo", "apt-get", "--yes"]:
+            if "purge" in args:
+                self.purged = True
+        elif args[:3] in (["sudo", "systemctl", "stop"], ["sudo", "snap", "remove"]):
+            pass
+        elif args[:2] == ["sudo", "systemd-tmpfiles"]:
+            self.assert_sandbox(Path(args[-1]))
+        elif args == ["sudo", "apt-get", "update"] or args[:2] == ["home-manager", "switch"]:
+            pass
         else:
             raise AssertionError(f"Unexpected external command: {args}")
         return subprocess.CompletedProcess(args, 0, output, "")
+
+    def assert_sandbox(self, path):
+        if not path.is_relative_to(self.root):
+            raise AssertionError(f"Refusing live-host fixture mutation: {path}")
 
 
 class TestNixosStage2AndGatekeeper(unittest.TestCase):
@@ -82,7 +138,7 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             "services.xserver.desktopManager.gnome.enable = true;",
             'options = "ctrl:nocaps";', "services.pipewire = {", "pulse.enable = true;",
             "virtualisation.docker.enable = true;",
-            "[ brave google-chrome wezterm zoom-us ]",
+            "[ brave google-chrome zoom-us ]",
             "programs.nix-ld.enable = true;", "services.envfs.enable = true;",
             "stdenv.cc.cc zlib bzip2 xz openssl glib libuuid icu libffi",
             "security.pki.certificateFiles", "security.pki.caCertificateBlacklist",
@@ -108,6 +164,7 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         packages = re.sub(r"#.*", "", target.group(1)).split()
         self.assertIn("xdg-utils", packages)
         self.assertIn('test -x "$out/usr/bin/xdg-open"', vpn)
+        self.assertIn("/opt/.cisco/certificates/ca", vpn)
 
     def test_cisco_vpn_module_and_workspace_bind_mounts(self):
         vpn = (ROOT / "hosts/bchapman-ubnt/cisco-vpn.nix").read_text()
@@ -141,9 +198,9 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         self.home = self.root / "home"
         self.home.mkdir()
         self.system = self.root / "system"
-        self.stage = self.root / "stage"
-        self.receipt = self.root / "verified-archives.json"
-        self.receipt.write_text(json.dumps({"version": 1, "items": [{"name": "old", "status": "VERIFIED"}]}))
+        self.source = self.root / "store-source"
+        self.source.mkdir()
+        self.activation = self.root / "activation"
         self.report = self.root / "verification.json"
         self.good_report = {
             "version": 1, "repository": "rclone:gdrive:bchapman-backup/restic-repo",
@@ -158,120 +215,329 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         }
         self.report.write_text(json.dumps(self.good_report))
         for asset in ASSETS:
-            path = self.system / "opt/cisco/secureclient" / asset
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("test-asset")
-            path.chmod(0o755)
-        self.runner = OfflineRunner()
+            self.make_file(self.system / "opt/cisco/secureclient" / asset)
+        self.make_file(self.system / "usr/local/share/ca-certificates/ginkgo.crt")
+        for binary in gatekeeper.MIGRATED_BINARIES:
+            self.make_file(self.activation / "home-path/bin" / binary)
+        self.runner = OfflineRunner(self.root, self.source, self.activation)
 
-    def invoke(self, command, *extra, free=150 * 1024 ** 3):
+    def make_file(self, path, content="test-asset\n"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        path.chmod(0o755)
+        return path
+
+    def invoke(self, command, *extra):
         output, errors = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors), patch(
-            "dotfiles_migrate.gatekeeper.shutil.disk_usage"
-        ) as usage:
-            usage.return_value.free = free
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             code = main([
                 "--home", str(self.home), "--flake", str(ROOT),
-                "--receipt", str(self.receipt), "--backup-report", str(self.report),
-                "--system-root", str(self.system), "--corp-stage", str(self.stage),
+                "--backup-report", str(self.report), "--system-root", str(self.system),
                 command, *extra,
             ], runner=self.runner)
-            if command == "preflight-stage2":
-                usage.assert_called_once_with("/")
         return code, output.getvalue(), errors.getvalue()
 
-    def test_gatekeeper_preflight_checks_and_lvm_runbook(self):
-        code, output, errors = self.invoke("preflight-stage2")
+    def assert_no_host_mutations(self):
+        self.assertFalse(any(call[0] in ("sudo", "home-manager") for call in self.runner.calls))
+
+    def test_preflight_ubuntu_verifies_git_flake_source_corp_services_and_nix_binaries(self):
+        self.assertEqual(set(gatekeeper.MIGRATED_BINARIES), {
+            "ghostty", "brave", "libreoffice", "inkscape", "redshift", "redshift-gtk",
+            "gcloud", "gh", "task", "glow", "lazygit", "gitu", "mdbook", "pandoc",
+            "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
+            "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",
+            "ncdu", "parallel", "datamash", "tree", "fx",
+        })
+        self.assertEqual(gatekeeper.CORPORATE_SERVICES, (
+            "centrifydc", "cisco-amp", "vpnagentd", "ir_agent", "drivestrike",
+            "connectwisecontrol-a8194903625f6c0d",
+        ))
+        for bad_report in (
+            {**self.good_report, "verified_at": (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()},
+            {**self.good_report, "Snapshot Backup": {"status": "UNVERIFIED"}},
+            {**self.good_report, "Browsable Sync": {"status": "UNVERIFIED"}},
+        ):
+            self.report.write_text(json.dumps(bad_report))
+            self.assertEqual(self.invoke("preflight-ubuntu")[0], 1)
+            self.assertEqual(self.runner.calls, [])
+        self.report.write_text(json.dumps(self.good_report))
+        code, output, errors = self.invoke("preflight-ubuntu")
         self.assertEqual(code, 0, errors)
         self.assertEqual(json.loads(output)["status"], "DRY_RUN")
-        self.assertEqual(self.runner.calls, [["nixos-rebuild", "dry-build", "--flake", f"{ROOT}#bchapman-ubnt"]])
-        self.assertEqual(self.invoke("preflight-stage2", free=150 * 1024 ** 3 - 1)[0], 1)
-        self.receipt.write_text('{"version": 1, "items": [{"name":"old", "status":"UNVERIFIED"}]}')
-        self.assertIn("unverified", self.invoke("preflight-stage2")[2])
-        self.receipt.unlink()
-        self.assertEqual(self.invoke("preflight-stage2")[0], 1)
-        self.receipt.write_text('{"version": 1, "items": []}')
-        for bad_report in (
-            {},
-            {**self.good_report, "verified_at": (datetime.now(timezone.utc) - timedelta(hours=49)).isoformat()},
-            {**self.good_report, "verified_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
-            {**self.good_report, "Snapshot Backup": {"status": "UNVERIFIED"}},
-            {**self.good_report, "Browsable Sync": {"status": "VERIFIED", "roots": []}},
-        ):
-            with self.subTest(report=bad_report):
-                self.report.write_text(json.dumps(bad_report))
-                self.assertEqual(self.invoke("preflight-stage2")[0], 1)
-        self.report.unlink()
-        self.assertEqual(self.invoke("preflight-stage2")[0], 1)
-        self.report.write_text(json.dumps(self.good_report))
-        profile = self.system / "opt/cisco/secureclient/vpn/profile/ginkgo-corp-profile.xml"
-        profile.unlink()
-        self.assertIn("Cisco", self.invoke("preflight-stage2")[2])
-        # A complete restored corporate staging tree is an accepted fallback.
+        uri = "git+" + ROOT.as_uri()
+        self.assertIn(["nix", "eval", "--raw", "--impure", "--expr",
+                       f'(builtins.getFlake {json.dumps(uri)}).outPath'], self.runner.calls)
+        self.assertIn(["nix", "build", "--no-link", "--print-out-paths",
+                       f'{uri}#homeConfigurations."bchapman@bchapman-ubnt".activationPackage'], self.runner.calls)
+        self.assertEqual([call[2] for call in self.runner.calls if call[:2] == ["systemctl", "is-active"]],
+                         list(gatekeeper.CORPORATE_SERVICES))
+        for name in gatekeeper.MIGRATED_BINARIES:
+            binary = self.activation / "home-path/bin" / name
+            binary.chmod(0o644)
+            with self.subTest(missing_binary=name):
+                self.assertIn(name, self.invoke("preflight-ubuntu")[2])
+            binary.chmod(0o755)
+        scratch = self.source / "tmp"
+        scratch.mkdir()
+        self.runner.calls.clear()
+        self.assertIn("tmp", self.invoke("preflight-ubuntu")[2])
+        self.assertFalse(any(call[:2] == ["nix", "build"] for call in self.runner.calls))
+        scratch.rmdir()
+        scratch.symlink_to(self.source / "missing")
+        self.assertIn("tmp", self.invoke("preflight-ubuntu")[2])
+        scratch.unlink()
+        for service in gatekeeper.CORPORATE_SERVICES:
+            self.runner.inactive_service = service
+            self.assertIn(service, self.invoke("preflight-ubuntu")[2])
+        self.runner.inactive_service = None
         for asset in ASSETS:
-            path = self.stage / "opt/cisco/secureclient" / asset
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("staged-test-asset")
-            path.chmod(0o755)
-        self.assertEqual(self.invoke("preflight-stage2")[0], 0)
+            path = self.system / "opt/cisco/secureclient" / asset
+            content = path.read_text()
+            path.write_text("")
+            self.assertIn("Cisco", self.invoke("preflight-ubuntu")[2])
+            path.write_text(content)
+        (self.system / "usr/local/share/ca-certificates/ginkgo.crt").unlink()
+        self.assertIn("CA certificates", self.invoke("preflight-ubuntu")[2])
+        self.assert_no_host_mutations()
         self.runner.fail_build = True
-        code, output, errors = self.invoke("preflight-stage2")
+        code, _, errors = self.invoke("preflight-ubuntu")
         self.assertEqual(code, 1)
         self.assertNotIn("private failure", errors)
-        self.runner.fail_build = False
-        code, output, errors = self.invoke("print-stage2-cutover-runbook")
-        self.assertEqual(code, 0, errors)
-        result = json.loads(output)
-        self.assertEqual(result["status"], "DRY_RUN")
-        runbook = result["runbook"]
-        for command in ("e2fsck -f /dev/vgubuntu/root", "lvreduce --resizefs",
-                        "lvcreate -n nixos", "nixos-install --flake", "findmnt -S",
-                        "UBUNTU_SIZE_GIB:?", "NIXOS_SIZE_GIB:?", "MANUAL ONLY"):
-            self.assertIn(command, runbook)
-        self.assertLess(runbook.index("e2fsck -f"), runbook.index("lvreduce --resizefs"))
-        self.assertFalse(any(call[0] in ("lvreduce", "lvcreate", "mkfs.ext4", "nixos-install")
-                             for call in self.runner.calls))
-        self.assertEqual(self.invoke("print-stage2-cutover-runbook", "--execute", "--confirm")[0], 1)
 
-    def test_all_subcommands_default_to_dry_run_and_retirement_is_gated(self):
-        for command, flags in (
-            ("preflight-stage1", []),
-            ("stage1-retire-legacy-managers", ["--stage1-validated"]),
-            ("preflight-stage2", []),
-            ("print-stage2-cutover-runbook", []),
-            ("retire-ubuntu-lv", ["--vpn-validated", "--workflows-validated", "--workspace-migrated"]),
+    def test_all_commands_require_fresh_complete_daily_backup_before_external_commands(self):
+        for bad_report in (
+            {},
+            {**self.good_report, "repository": "wrong"},
+            {**self.good_report, "verified_at": (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()},
+            {**self.good_report, "verified_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()},
+            {**self.good_report, "verified_at": datetime.now().isoformat()},
+            {**self.good_report, "Snapshot Backup": {"status": "UNVERIFIED"}},
+            {**self.good_report, "Snapshot Backup": {"status": "VERIFIED", "snapshot_count": 0}},
+            {**self.good_report, "Browsable Sync": {"status": "UNVERIFIED"}},
+            {**self.good_report, "Browsable Sync": {"status": "VERIFIED", "roots": []}},
         ):
-            with self.subTest(command=command):
-                code, output, errors = self.invoke(command, *flags)
-                self.assertEqual(code, 0, errors)
-                self.assertEqual(json.loads(output)["status"], "DRY_RUN")
-        self.assertEqual(self.invoke("retire-ubuntu-lv")[0], 1)
-        flags = ["--vpn-validated", "--workflows-validated", "--workspace-migrated"]
-        self.runner.mounts = [{"source": "/dev/mapper/vgubuntu-nixos", "target": "/",
-                               "children": [{"source": "/dev/mapper/vgubuntu-root[/home/bchapman/ginkgo]",
-                                             "target": "/home/bchapman/ginkgo"}]}]
-        self.assertIn("still mounted", self.invoke("retire-ubuntu-lv", *flags)[2])
-        self.assertEqual(self.invoke("retire-ubuntu-lv", *flags, "--execute", "--confirm")[0], 1)
-        self.assertEqual(self.invoke("stage1-retire-legacy-managers", "--execute")[0], 1)
-        nvm = self.home / ".nvm"
-        nvm.mkdir()
-        code, output, errors = self.invoke("stage1-retire-legacy-managers", "--stage1-validated")
+            self.report.write_text(json.dumps(bad_report))
+            for command in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge", "simplify-ubuntu-host"):
+                with self.subTest(report=bad_report, command=command):
+                    self.runner.calls.clear()
+                    self.assertEqual(self.invoke(command, "--execute", "--confirm")[0], 1)
+                    self.assertEqual(self.runner.calls, [])
+        self.report.unlink()
+        self.assertEqual(self.invoke("preflight-ubuntu")[0], 1)
+
+    def test_clean_user_space_reclaims_legacy_dirs_and_preserves_active_launchers(self):
+        self.assertEqual(gatekeeper.PRESERVED_LAUNCHERS, {
+            "claude", "codex", "herdr", "pibox", "nori-auth", "skills-curl", "skills-curl.ps1",
+            "catalyst-agent-hook-runner", "catalyst-agent-skills-auth", "keyring", "poetry",
+            "gws", "fix_docker_vpn.sh", "fix_docker_vpn_chris.sh", "python3.12",
+        })
+        retired = [self.home / path for path in (
+            ".nvm.retired", "install", ".local/lib/python3.8", ".local/opt/wezterm",
+            ".dotfiles/tmp/cisco-vm/runtime",
+        )]
+        for directory in retired:
+            self.make_file(directory / "data")
+        disk = self.make_file(self.home / ".dotfiles/tmp/cisco-vm/cisco-probe.qcow2")
+        retained = self.make_file(self.home / ".dotfiles/tmp/cisco-vm/notes")
+        local_bin = self.home / ".local/bin"
+        for name in gatekeeper.PRESERVED_LAUNCHERS - set(gatekeeper.RELOCATED_SCRIPTS):
+            self.make_file(local_bin / name, "#!/usr/bin/python3.8\nactive launcher\n")
+        stale = [self.make_file(local_bin / name, shebang) for name, shebang in (
+            ("old-pip-tool", "#!/usr/bin/python3.8\n"),
+            ("old-pip310", "#!/usr/bin/python3.10\n"),
+            ("old-focal-pip", "#!/usr/bin/python3\n"),
+            ("agy", "#!/bin/sh\n"), ("ruff", "binary\n"),
+            ("wezterm", "binary\n"), ("wezterm-gui", "binary\n"),
+            ("wezterm-mux-server", "binary\n"),
+        )]
+        custom = self.make_file(local_bin / "custom-script", "#!/bin/sh\nkeep me\n")
+        new_python = self.make_file(local_bin / "new-python-tool", "#!/usr/bin/python3.12\n")
+        for name in gatekeeper.RELOCATED_SCRIPTS:
+            self.make_file(self.system / "usr/local/bin" / name, f"#!/bin/sh\n{name}\n")
+        bashrc = self.make_file(self.home / ".bashrc.local", (
+            "export KEEP=yes\nsource ~/install/system/google-cloud-sdk/path.bash.inc\n"
+            "source /home/bchapman/install/system/google-cloud-sdk/completion.bash.inc\n# keep this\n"))
+        code, output, errors = self.invoke("clean-user-space")
         self.assertEqual(code, 0, errors)
-        self.assertIn(["mv", "--", str(nvm), str(self.home / ".nvm.retired")],
-                      json.loads(output)["quarantine_commands"])
-        self.assertFalse(any(call[0] == "mv" for call in self.runner.calls))
-        self.assertTrue(nvm.is_dir())
-        code, output, errors = self.invoke("stage1-retire-legacy-managers", "--stage1-validated",
-                                            "--execute", "--confirm", "--dry-run")
+        self.assertEqual(len(json.loads(output)["relocations"]), 3)
+        self.assertTrue(all(path.exists() for path in [*retired, disk, *stale]))
+        self.assertIn("google-cloud-sdk", bashrc.read_text())
+        self.assertEqual(self.invoke("clean-user-space", "--execute")[0], 1)
+        self.report.write_text(json.dumps({**self.good_report, "verified_at":
+            (datetime.now(timezone.utc) - timedelta(hours=49)).isoformat()}))
+        self.assertEqual(self.invoke("clean-user-space", "--execute", "--confirm")[0], 1)
+        self.assertTrue(all(path.exists() for path in [*retired, disk, *stale]))
+        self.report.write_text(json.dumps(self.good_report))
+        ghostty = self.activation / "home-path/bin/ghostty"
+        ghostty.unlink()
+        self.assertIn("ghostty", self.invoke("clean-user-space", "--execute", "--confirm")[2])
+        self.assertTrue(all(path.exists() for path in [*retired, disk, *stale]))
+        self.make_file(ghostty)
+        code, _, errors = self.invoke("clean-user-space", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertFalse(any(path.exists() for path in [*retired, disk, *stale]))
+        self.assertEqual(bashrc.read_text(), "export KEEP=yes\n# keep this\n")
+        for name in gatekeeper.PRESERVED_LAUNCHERS:
+            self.assertTrue((local_bin / name).exists(), name)
+        for name in gatekeeper.RELOCATED_SCRIPTS:
+            self.assertFalse((self.system / "usr/local/bin" / name).exists())
+            self.assertTrue((local_bin / name).stat().st_mode & 0o111)
+        self.assertTrue(all(path.exists() for path in (custom, new_python, retained)))
+        self.assertEqual(self.invoke("clean-user-space", "--execute", "--confirm")[0], 0)
+        self.assert_no_host_mutations()
+
+    def test_cleanup_preserves_existing_destinations_and_does_not_follow_retired_symlinks(self):
+        source = self.make_file(self.system / "usr/local/bin/gws", "old\n")
+        destination = self.make_file(self.home / ".local/bin/gws", "new\n")
+        outside = self.make_file(self.root / "outside/data")
+        (self.home / ".nvm.retired").symlink_to(outside.parent, target_is_directory=True)
+        code, _, errors = self.invoke("clean-user-space", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(destination.read_text(), "new\n")
+        self.assertTrue(source.exists())
+        self.assertTrue(outside.exists())
+        self.assertFalse((self.home / ".nvm.retired").is_symlink())
+
+    def test_read_only_host_script_sources_are_reported_for_deferred_host_cleanup(self):
+        source = self.make_file(self.system / "usr/local/bin/gws", "#!/bin/sh\nactive\n")
+        unlink = Path.unlink
+
+        def deny_source_unlink(path, *args, **kwargs):
+            if path == source:
+                raise PermissionError(errno.EACCES, "read-only host mount")
+            return unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", deny_source_unlink):
+            code, output, errors = self.invoke("clean-user-space", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["source_removal_deferred_to_host_cleanup"], [str(source)])
+        self.assertEqual((self.home / ".local/bin/gws").read_text(), source.read_text())
+        self.assert_no_host_mutations()
+
+    def test_activate_host_bridge_and_simplify_ubuntu_host_protected_package_guard(self):
+        self.assertEqual(gatekeeper.APPROVED_APT_SOURCES, {
+            "artifactory-centrify2.list",
+            "artifactory_releng_ginkgo_zone_artifactory_ubuntu_local.list",
+            "drivestrike.list", "docker.list", "google-chrome.sources",
+            "oem-sutton.newell-aekerley-meta.list",
+        })
+        self.assertEqual(gatekeeper.PROTECTED_HOST_PACKAGES, {
+            "ubuntu-desktop", "gdm3", "gnome-shell", "gnome-terminal", "network-manager",
+            "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin",
+            "docker-compose-plugin", "openssh-server", "google-chrome-stable", "zoom",
+            "centrifydc", "centrifydc-openssl", "centrifydc-openldap", "centrifydc-curl",
+            "ciscoampconnector", "cisco-orbital", "drivestrike",
+            "connectwisecontrol-a8194903625f6c0d", "dev42-lx-agent", "auditd", "lvm2",
+            "cryptsetup", "cryptsetup-bin", "cryptsetup-initramfs", "grub-common",
+            "grub-efi-amd64-signed", "shim-signed", "linux-image-generic-hwe-20.04",
+            "intel-microcode", "oem-sutton.newell-meta", "oem-sutton.newell-aekerley-meta",
+        })
+        config = self.system / gatekeeper.BRIDGE_CONFIG
+        code, output, errors = self.invoke("activate-host-bridge")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["write"][str(config)], gatekeeper.BRIDGE_CONTENT)
+        self.assertFalse(config.exists())
+        self.assert_no_host_mutations()
+        code, _, errors = self.invoke("activate-host-bridge", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(config.read_text(),
+                         "L+ /run/opengl-driver - - - - /home/bchapman/.local/state/nix-opengl-driver\n")
+        tmpfiles = ["sudo", "systemd-tmpfiles", "--create", str(config)]
+        switch = ["home-manager", "switch", "--flake", f"git+{ROOT.as_uri()}#bchapman@bchapman-ubnt"]
+        self.assertLess(self.runner.calls.index(tmpfiles), self.runner.calls.index(switch))
+        self.runner.calls.clear()
+        sources = self.system / "etc/apt/sources.list.d"
+        for name in gatekeeper.APPROVED_APT_SOURCES:
+            self.make_file(sources / name)
+        retired_sources = [self.make_file(sources / f"retired-{i}.list") for i in range(18)]
+        backup_source = self.make_file(sources / "docker.list.save")
+        host_dirs = [self.system / path for path in (
+            "home/linuxbrew.retired", "usr/local/aws-cli", "usr/local/share/Antigravity-x64",
+        )]
+        for directory in host_dirs:
+            self.make_file(directory / "data")
+        binary = self.make_file(self.system / "usr/local/bin/bb")
+        dangling = self.system / "usr/local/bin/dangling"
+        dangling.symlink_to(self.root / "absent")
+        active_binary = self.make_file(self.system / "usr/local/bin/company-tool")
+        code, output, errors = self.invoke("simplify-ubuntu-host")
         self.assertEqual(code, 0, errors)
         self.assertEqual(json.loads(output)["status"], "DRY_RUN")
-        self.assertFalse(any(call[0] == "mv" for call in self.runner.calls))
+        self.assertIn(["apt-get", "-s", "purge", "snapd", "mysql-server-8.0", "gh"], self.runner.calls)
+        self.assertIn(["apt-get", "-s", "autoremove", "--purge"], self.runner.calls)
+        self.assert_no_host_mutations()
+        self.assertTrue(all(path.exists() for path in retired_sources + host_dirs))
+        for package in gatekeeper.PROTECTED_HOST_PACKAGES:
+            for action in ("Remv", "Purg"):
+                for phase in ("purge_output", "autoremove_output"):
+                    with self.subTest(package=package, action=action, phase=phase):
+                        self.runner.calls.clear()
+                        setattr(self.runner, phase, f"{action} {package}:amd64 [1.0]\n")
+                        code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+                        self.assertEqual(code, 1)
+                        self.assertIn("Protected Host Package Guard", errors)
+                        self.assert_no_host_mutations()
+                        setattr(self.runner, phase, "")
+        self.runner.calls.clear()
+        code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual({path.name for path in sources.iterdir()}, gatekeeper.APPROVED_APT_SOURCES)
+        self.assertFalse(any(path.exists() for path in [*host_dirs, binary, backup_source]))
+        self.assertFalse(dangling.is_symlink())
+        self.assertTrue(active_binary.exists())
+        self.assertEqual((self.system / "etc/apt/preferences.d/no-snapd.pref").read_text(),
+                         "Package: snapd\nPin: release *\nPin-Priority: -10\n")
+        snap_calls = [call for call in self.runner.calls if call[:3] == ["sudo", "snap", "remove"]]
+        self.assertEqual([call[-1] for call in snap_calls],
+                         ["firefox", "gnome-3-38-2004", "core20", "snapd"])
+        self.assertTrue(all("--purge" in call for call in snap_calls))
+        self.assertIn(["sudo", "systemctl", "stop", "mysql.service"], self.runner.calls)
+        self.assertIn(["sudo", "apt-get", "--yes", "purge", "snapd", "mysql-server-8.0", "gh"], self.runner.calls)
+        self.assertIn(["sudo", "apt-get", "--yes", "install", "--allow-downgrades",
+                       "git=1:2.25.1-1ubuntu3.14", "git-man=1:2.25.1-1ubuntu3.14"], self.runner.calls)
+        self.assertIn(["sudo", "apt-get", "--yes", "purge", "old-config"], self.runner.calls)
+        autoremove = ["sudo", "apt-get", "--yes", "autoremove", "--purge"]
+        index = self.runner.calls.index(autoremove)
+        self.assertEqual(self.runner.calls[index - 1], ["apt-get", "-s", "autoremove", "--purge"])
 
-    def test_entrypoint_is_executable_and_prints_a_safe_runbook(self):
-        result = subprocess.run([str(ROOT / "bin/migration-gatekeeper"), "print-stage2-cutover-runbook"],
+    def test_autoremove_is_reguarded_after_purge_and_new_residuals_are_guarded(self):
+        self.runner.late_autoremove_output = "Remv docker-ce [1.0]\n"
+        code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+        self.assertEqual(code, 1)
+        self.assertIn("docker-ce", errors)
+        self.assertNotIn(["sudo", "apt-get", "--yes", "autoremove", "--purge"], self.runner.calls)
+        self.runner = OfflineRunner(self.root, self.source, self.activation)
+        self.runner.packages = "ubuntu-desktop\trc \n"
+        self.runner.purge_output = "Purg ubuntu-desktop [1.0]\n"
+        code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+        self.assertEqual(code, 1)
+        self.assertIn("ubuntu-desktop", errors)
+        self.assert_no_host_mutations()
+
+    def test_all_commands_default_to_dry_run_and_require_confirmation(self):
+        for command in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge", "simplify-ubuntu-host"):
+            for flags in ((), ("--execute", "--confirm", "--dry-run")):
+                with self.subTest(command=command, flags=flags):
+                    self.runner.calls.clear()
+                    code, output, errors = self.invoke(command, *flags)
+                    self.assertEqual(code, 0, errors)
+                    self.assertEqual(json.loads(output)["status"], "DRY_RUN")
+                    self.assert_no_host_mutations()
+            self.runner.calls.clear()
+            self.assertEqual(self.invoke(command, "--execute")[0], 1)
+            self.assertEqual(self.runner.calls, [])
+        self.make_file(self.system / "usr/local/bin/gws")
+        self.assertIn("clean-user-space", self.invoke("simplify-ubuntu-host")[2])
+
+    def test_entrypoint_is_executable_and_retires_lvm_commands(self):
+        result = subprocess.run([str(ROOT / "bin/migration-gatekeeper"), "--help"],
                                 capture_output=True, text=True, check=True)
-        self.assertEqual(json.loads(result.stdout)["status"], "DRY_RUN")
-        self.assertIn("lvreduce --resizefs", result.stdout)
+        for command in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge", "simplify-ubuntu-host"):
+            self.assertIn(command, result.stdout)
+        self.assertNotIn("stage2", result.stdout)
+        result = subprocess.run([str(ROOT / "bin/migration-gatekeeper"), "retire-ubuntu-lv"],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
 
 
 if __name__ == "__main__":

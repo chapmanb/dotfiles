@@ -10,10 +10,14 @@ in {
 
   # Nix owns tools and base runtimes; project environments and agents stay mutable.
   home.packages = with pkgs; [
-    ripgrep fd bat fzf jq rclone restic pkgs.unstable.zstd git glab neovim wezterm pkgs.unstable.ghostty tmux
+    ripgrep fd bat fzf jq rclone restic pkgs.unstable.zstd git glab neovim pkgs.unstable.ghostty tmux
     awscli2 snowflake-cli babashka clojure leiningen ruff pyright tree-sitter
     xclip wl-clipboard pass gnupg
     nodejs_24 python315 uv pixi bun deno pnpm
+    brave libreoffice inkscape redshift
+    gh go-task glow lazygit gitu mdbook pandoc clj-kondo clojure-lsp
+    kubectl kubernetes-helm k9s argo terraform terraform-docs google-cloud-sdk pre-commit
+    ffmpeg graphviz imagemagick qpdf sqlite ncdu parallel datamash tree fx
   ];
 
   home.file = {
@@ -26,7 +30,8 @@ in {
     ".config/msmtp/config".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/msmtprc";
     ".config/nvim/init.lua".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nvim/init.lua";
     ".config/nvim/nvim-pack-lock.json".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nvim/nvim-pack-lock.json";
-    ".wezterm.lua".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/wezterm/wezterm.lua";
+    # Ubuntu's /run/opengl-driver bridge follows this ABI-matching Mesa link.
+    ".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;
     ".config/herdr/config.toml".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/herdr/config.toml";
     ".config/home-manager".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}";
     ".config/nix/nix.conf".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nix/nix.conf";

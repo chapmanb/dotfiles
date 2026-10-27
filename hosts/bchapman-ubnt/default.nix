@@ -70,7 +70,7 @@
     pulse.enable = true;
   };
   virtualisation.docker.enable = true;
-  environment.systemPackages = with pkgs; [ brave google-chrome wezterm zoom-us ];
+  environment.systemPackages = with pkgs; [ brave google-chrome zoom-us ];
 
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [

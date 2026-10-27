@@ -1,92 +1,112 @@
 # Brad's dotfiles
 
-The unified flake provides `homeConfigurations."bchapman@bchapman-ubnt"` for
-**User-Space Replication (Stage 1)** on Ubuntu and
-`nixosConfigurations.bchapman-ubnt` for **Dual-Boot Cutover (Stage 2)**. The latter
-imports `hosts/bchapman-ubnt`, supplied by the separate Stage 2 implementation;
-it is not buildable until that host module is present.
+## Permanent architecture
 
-## Stage 1
+Ubuntu is the **Ubuntu Host Base**: boot, LUKS/LVM, kernel/OEM drivers,
+GNOME/GDM/Xorg, native `gnome-terminal` fallback, Docker, OpenSSH, Chrome, Zoom,
+and the mandatory **Corporate Endpoint Stack** stay native. The unified flake's
+`homeConfigurations."bchapman@bchapman-ubnt"` is the permanent **Declarative
+User-Space**: developer tools, language runtimes, Ghostty, Brave, LibreOffice,
+Inkscape and Redshift. WezTerm is retired.
 
-Keep this checkout at `/home/bchapman/.dotfiles`. With Nix and flakes installed,
-first build without activating (safe inside the read-only sandbox):
+`hosts/bchapman-ubnt/` and `nixosConfigurations.bchapman-ubnt` are a **Dormant
+NixOS Reference**, not an active dual-boot target. The Cisco FHS browser launcher,
+root-certificate notes and mount dependencies remain available for reference.
+There are no active LVM cutover or Ubuntu retirement commands.
+
+Keep this checkout at `/home/bchapman/.dotfiles`. All migration-tool Nix
+operations use `git+file://` inputs; ignored scratch files must never enter a
+world-readable store snapshot. Review and track intended flake changes before
+building. With Nix flakes installed, build without activation:
 
 ```sh
-nix run github:nix-community/home-manager/release-24.11 -- build \
-  --flake '/home/bchapman/.dotfiles#bchapman@bchapman-ubnt'
+nix build --no-link --print-out-paths \
+  'git+file:///home/bchapman/.dotfiles#homeConfigurations."bchapman@bchapman-ubnt".activationPackage'
 ```
 
-Review the build and existing files before switching in a host terminal via the
-migration gatekeeper workflow. Existing non-Home-Manager files may conflict with
-activation: preserve a backup before replacing them. Do not run activation or
-remove Homebrew/NVM from the sandbox. Commit and review the generated `flake.lock`
-on the host before relying on repeatable package versions.
-
-Home Manager links active Neovim, WezTerm, herdr, shell, Git, and retained user
-configs back into this checkout using `mkOutOfStoreSymlink`: edits apply live,
-without another switch. It owns CLI tools and base runtimes; `uv`/`pixi` project
-environments and agent installers remain mutable. Agent launchers in
-`~/.local/bin` and `~/.bun/bin` remain on PATH. For tmux plugins, start tmux and
-press `ctrl-o + I`.
+Home Manager links active Neovim, herdr, shell, Git and retained user configs
+back into the checkout using `mkOutOfStoreSymlink`. It owns base runtimes;
+`uv`/`pixi` project environments and coding-agent installers remain mutable.
+`~/.local/bin` and `~/.bun/bin` stay on PATH, with Nix ahead of `/usr/local/bin`.
+For tmux plugins, start tmux and press `ctrl-o + I`.
 
 All five runtime CA variables point to `/etc/ssl/certs/ca-certificates.crt`.
-Before activation, verify that the host bundle trusts the required Ginkgo roots
-and excludes the distrusted eMudhra roots; these variables do not install CAs.
-The backup service receives the same trust variables and an explicit Nix tool
-PATH (it does not read `.bashrc`).
+Verify that this host bundle trusts Ginkgo roots and excludes distrusted eMudhra
+roots; environment variables do not install certificates. The daily backup
+service receives the same variables and an explicit Nix tool PATH.
+Initialize and verify the daily backup before enabling its persistent 10pm
+Eastern user timer. Inspect it with
+`systemctl --user list-timers dotfiles-daily-backup.timer` and
+`journalctl --user -u dotfiles-daily-backup.service`.
+Passwords, credentials and Cisco assets must stay outside this repository.
 
-Initialize and verify the daily backup before activating its daily persistent
-user timer. The timer runs `/home/bchapman/.dotfiles/bin/daily-backup run`; its
-CLI is supplied by the daily-backup implementation. Check scheduling and logs
-with `systemctl --user list-timers dotfiles-daily-backup.timer` and
-`journalctl --user -u dotfiles-daily-backup.service`. Passwords, credentials, and
-Cisco assets must stay outside this repository.
+## Backup-gated Ubuntu simplification
 
-Dotbot's `install` entrypoint and configuration, along with retired legacy
-configs, are removed. The dormant `dotbot` submodule and `.gitmodules` are left
-untouched so patches apply cleanly across worktrees.
-
-## NixOS default terminal
-
-Ghostty is installed from the pinned unstable package set. The NixOS Home Manager
-configuration launches it at GNOME login, binds **Ctrl+Alt+T**, and sets `TERMINAL`,
-GNOME's terminal preference, and the `xdg-terminal-exec` preference to Ghostty.
-GNOME Terminal remains installed as a manual fallback (`gnome-terminal`). Apps
-with their own terminal setting or a hard-coded launcher may still need their
-own configuration; GNOME does not have one universal terminal default.
-
-Desktop integration is imported only by the NixOS output, not standalone Ubuntu
-Home Manager. It replaces the known legacy autostart file with a disabled entry
-and adds a Ghostty entry, leaving other login applications alone. Before the
-first activation, back up the old file **in a host terminal outside pibox**:
+Run `bin/daily-backup verify` first. The gatekeeper requires a report less than
+48 hours old covering both Snapshot Backup and every Browsable Sync root.
+Every command defaults to a preview; mutations require **both** `--execute
+--confirm`, and `--dry-run` overrides execution. Previews still evaluate/build
+Nix and query services/package simulations; they are not network-free.
 
 ```sh
-cp -n ~/.config/autostart/gnome-terminal.desktop \
-  ~/.config/autostart/gnome-terminal.desktop.before-ghostty
-sudo nixos-rebuild switch --flake '/home/bchapman/.dotfiles#bchapman-ubnt'
+bin/migration-gatekeeper preflight-ubuntu
+bin/migration-gatekeeper clean-user-space
+bin/migration-gatekeeper clean-user-space --execute --confirm
+# The following require an unsandboxed host terminal with sudo available:
+bin/migration-gatekeeper activate-host-bridge
+bin/migration-gatekeeper activate-host-bridge --execute --confirm
+bin/migration-gatekeeper simplify-ubuntu-host
+bin/migration-gatekeeper simplify-ubuntu-host --execute --confirm
 ```
 
-After a successful rebuild, log out and back into GNOME. Check that only Ghostty
-opens automatically,
-**Ctrl+Alt+T** opens Ghostty, and `gnome-terminal` still works manually. The shared
-home directory means NixOS activation changes shared files; reapply standalone
-Home Manager if returning to Ubuntu. Reverting the configuration commit and
-rebuilding restores the prior declarative configuration; restore the backup
-above if you also want the unmanaged GNOME Terminal login entry back.
+`preflight-ubuntu` checks the Git-filtered evaluated source has no `tmp`, builds
+the activation package, checks all migrated executables in its `home-path`,
+and verifies native Cisco assets, local CA certificates and active corporate
+services. Host bridge activation and host simplification rerun this preflight.
 
-## Cache cleanup
+`clean-user-space` checks backup freshness and the built Nix replacements,
+relocates `gws` and the two `fix_docker_vpn*.sh` scripts to `~/.local/bin` without
+overwriting existing launchers, removes retired gcloud shell source lines,
+and deletes retired toolchains, Python 3.8 libraries/legacy pip scripts,
+WezTerm and Cisco VM scratch artifacts. Active agent/auth launchers, Poetry,
+keyring and Python 3.12 are allowlisted. If a destination already exists, the
+original is left for host cleanup. In a read-only pibox mount, scripts are
+copied into the user directory and original removal is explicitly reported as
+deferred to `simplify-ubuntu-host`. Never run the whole gatekeeper under sudo
+(Home Manager and home files must retain the user's identity).
+
+`activate-host-bridge` installs the systemd-tmpfiles rule linking
+`/run/opengl-driver` to `/home/bchapman/.local/state/nix-opengl-driver`, creates
+it immediately and switches standalone Home Manager as the current user.
+Home Manager supplies ABI-matching Nixpkgs Mesa, Ghostty GNOME autostart and
+Ctrl+Alt+T integration, and Brave browser registration. Native Ubuntu
+`/usr/bin/gnome-terminal` remains the fallback; no Nix GNOME Terminal client or
+per-binary nixGL wrapper is needed. Back up conflicting unmanaged config files
+before switching, and log out/in to validate desktop changes.
+
+`simplify-ubuntu-host` targets an **Upgrade-Clean APT State**. The **Protected
+Host Package Guard** rejects protected `Remv`/`Purg` entries in `apt-get -s
+purge` and `apt-get -s autoremove --purge` output, including architecture-qualified
+names. It rechecks immediately before purging/autoremoving and also guards the
+Git downgrade. It removes retired `/usr/local` entries and Linuxbrew, all snaps,
+and unused packages; pins snapd at priority -10; retains only the six approved
+corporate/Docker/Chrome/OEM APT source files; restores stock Focal Git/git-man
+`1:2.25.1-1ubuntu3.14`; and purges residual configurations. A failure stops the
+workflow but does not roll back earlier actions: inspect the preview, retain
+verified off-host backups and rerun preflight after any interruption. No Ubuntu
+release upgrade is performed.
+
+## Cache cleanup and offline checks
 
 `bin/cold-archive prune-caches` previews removal of `.dotfiles/tmp` and agent-plan
 `scratch`/`repos` directories; deletion requires `--execute --confirm`.
-It leaves uv caches untouched. Use `uv cache prune` separately to reclaim unused
-uv cache entries without deleting the entire cache.
-
-## Offline checks
+It leaves uv caches untouched. Use `uv cache prune` separately.
 
 ```sh
-python3 -B -m unittest tests.test_flake_and_home
+python3 -B -m unittest discover -s tests
 ```
 
-These checks validate declarative structure and the imported configuration
-snapshot, not Nix evaluation or host activation. Run the Nix build preflight on
-a Nix-enabled host before switching.
+These checks validate declarative structure and offline command/filesystem
+contracts, not live Nix builds, root operations, VPN login or host activation.
+Dotbot's old entrypoint/configuration is retired; its dormant submodule and
+`.gitmodules` remain untouched.

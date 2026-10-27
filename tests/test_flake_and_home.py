@@ -11,20 +11,24 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 UNSTABLE_PACKAGES = {
-    "neovim", "wezterm", "uv", "pixi", "bun", "nodejs_24", "python315", "deno", "pnpm",
+    "neovim", "uv", "pixi", "bun", "nodejs_24", "python315", "deno", "pnpm",
     "ruff", "pyright", "rclone", "restic", "glab", "brave", "google-chrome",
 }
 HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
-    "neovim", "wezterm", "pkgs.unstable.ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
+    "neovim", "pkgs.unstable.ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
     "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
+    "brave", "libreoffice", "inkscape", "redshift",
+    "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "clj-kondo", "clojure-lsp",
+    "kubectl", "kubernetes-helm", "k9s", "argo", "terraform", "terraform-docs", "google-cloud-sdk",
+    "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
+    "datamash", "tree", "fx",
 }
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
     "config/nvim/init.lua": "11445b38ebc3983654b1b40aa5541fb1bef92114fbdc5750b247ab17e552c15c",
     "config/nvim/nvim-pack-lock.json": "4de08dbba16e09a37c0e1b2503d33718422cfc0c3938efaad0a68c1ae1e38b70",
-    "config/wezterm/wezterm.lua": "1c41636673e813e427a627fe446c13b01fab8a0d24cfe2786bcfac5416937594",
     "config/herdr/config.toml": "8633509a5812dc6330a2ea2ca21064e78a98f9d26437bfd0c768cfa0bb351bdc",
 }
 RETIRED_FILES = (
@@ -60,7 +64,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertEqual(set(overlay.group(1).split()), UNSTABLE_PACKAGES)
         self.assertRegex(
             flake,
-            r'homeConfigurations\."bchapman@bchapman-ubnt" = home-manager\.lib\.homeManagerConfiguration\s*\{\s*inherit pkgs;\s*modules = \[\s*./home\s*\{\s*targets.genericLinux.enable = true;[^}]*\}\s*\];',
+            r'homeConfigurations\."bchapman@bchapman-ubnt" = home-manager\.lib\.homeManagerConfiguration\s*\{\s*inherit pkgs;\s*modules = \[\s*./home\s*./home/ghostty\.nix\s*\{\s*targets.genericLinux.enable = true;[^}]*\}\s*\];',
         )
         self.assertRegex(
             flake,
@@ -73,15 +77,28 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];", flake)
         self.assertEqual(flake.count("config.allowUnfree = true;"), 3)
 
-    def test_ghostty_nixos_desktop_integration(self):
+    def test_ubuntu_ghostty_and_brave_desktop_integration(self):
         home = (ROOT / "home/default.nix").read_text()
         flake = (ROOT / "flake.nix").read_text()
         desktop = (ROOT / "home/ghostty.nix").read_text()
         standalone, nixos = flake.split("nixosConfigurations.bchapman-ubnt =", 1)
         self.assertIn("pkgs.unstable.ghostty", home)
-        self.assertNotIn("./home/ghostty.nix", standalone)
+        self.assertIn("./home/ghostty.nix", standalone)
+        self.assertIn("targets.genericLinux.enable = true;", standalone)
+        self.assertIn("xdg.mime.enable = false;", standalone)
         self.assertIn("home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];", nixos)
-        self.assertIn("home.packages = [ pkgs.gnome-terminal pkgs.xdg-terminal-exec ];", desktop)
+        self.assertIn("home.packages = [ pkgs.xdg-terminal-exec ];", desktop)
+        self.assertNotIn("pkgs.gnome-terminal", desktop)
+        self.assertIn("xdg.mimeApps = {", desktop)
+        mime = desktop.split("xdg.mimeApps = {", 1)[1].split("xdg.configFile =", 1)[0]
+        self.assertIn("enable = true;", mime)
+        self.assertIn("defaultApplications = {", mime)
+        for handler in ("x-scheme-handler/http", "x-scheme-handler/https",
+                        "text/html", "application/xhtml+xml"):
+            self.assertIn(f'"{handler}" = [ "brave-browser.desktop" ];', mime)
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        self.assertIn("brave", packages.group(1).split())
         self.assertNotIn("excludePackages", (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
         self.assertIn('ghostty = "${pkgs.unstable.ghostty}/bin/ghostty";', desktop)
         self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
@@ -125,7 +142,6 @@ class TestFlakeAndHome(unittest.TestCase):
             ".config/msmtp/config": "msmtprc",
             ".config/nvim/init.lua": "config/nvim/init.lua",
             ".config/nvim/nvim-pack-lock.json": "config/nvim/nvim-pack-lock.json",
-            ".wezterm.lua": "config/wezterm/wezterm.lua",
             ".config/herdr/config.toml": "config/herdr/config.toml",
         }
         for destination, source in links.items():
@@ -164,7 +180,36 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('Unit = "dotfiles-daily-backup.service";', timer)
         self.assertIn('Install.WantedBy = [ "timers.target" ];', timer)
 
-    def test_overlay_omits_zstd_and_bashrc_fallback(self):
+    def test_declarative_userspace_packages_opengl_bridge_and_wezterm_retirement(self):
+        home = (ROOT / "home/default.nix").read_text()
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        self.assertEqual(len(HOME_PACKAGES), 63)
+        self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
+        self.assertIn('".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;', home)
+        for source in ("flake.nix", "home/default.nix", "lib/dotfiles_migrate/daily_backup.py"):
+            with self.subTest(source=source):
+                self.assertNotIn("wezterm", (ROOT / source).read_text().lower())
+        self.assertFalse((ROOT / "config/wezterm").exists())
+        self.assertFalse((ROOT / "config/wezterm/wezterm.lua").exists())
+
+    def test_bashrc_retires_legacy_managers_and_dormant_nixos_reference(self):
+        shell = (ROOT / "bashrc").read_text()
+        for legacy in ("/home/linuxbrew", ".nvm", "NVM_DIR", "google-cloud-sdk"):
+            self.assertNotIn(legacy, shell)
+        host = (ROOT / "hosts/bchapman-ubnt/default.nix").read_text()
+        self.assertIn("environment.systemPackages = with pkgs; [ brave google-chrome zoom-us ];", host)
+        self.assertNotIn("wezterm", host)
+        self.assertIn("imports = [ ./cisco-vpn.nix ./bind-mounts.nix ];", host)
+        cisco = (ROOT / "hosts/bchapman-ubnt/cisco-vpn.nix").read_text()
+        self.assertIn("/opt/.cisco/certificates/ca", cisco)
+        self.assertIn("public root certificates", cisco)
+        self.assertIn('test -x "$out/usr/bin/xdg-open"', cisco)
+        self.assertIn('unitConfig.RequiresMountsFor = [ "/mnt/ubuntu" ];', cisco)
+        mounts = (ROOT / "hosts/bchapman-ubnt/bind-mounts.nix").read_text()
+        self.assertIn('"x-systemd.requires-mounts-for=/mnt/ubuntu"', mounts)
+        self.assertIn('depends = [ "/mnt/ubuntu" ];', mounts)
+
         flake = (ROOT / "flake.nix").read_text()
         overlay = re.search(r"inherit \(unstable\)([^;]+);", flake)
         self.assertIsNotNone(overlay)
@@ -191,25 +236,25 @@ class TestFlakeAndHome(unittest.TestCase):
             }
             agents = {str(home / ".local/bin"), str(home / ".bun/bin")}
             for activated in (False, True):
-                with self.subTest(home_manager=activated):
-                    if activated:
-                        session.parent.mkdir(parents=True)
-                        session.write_text('export PATH="$HOME/.nix-profile/bin:$PATH"\n')
-                    result = subprocess.run(
-                        ["bash", "--noprofile", "--norc", "-c",
-                         '. "$1"; printf "%s\\n" "$PATH"', "bash", str(ROOT / "bashrc")],
-                        env=environment, check=True, text=True, capture_output=True,
-                    )
-                    paths = result.stdout.strip().split(os.pathsep)
-                    self.assertTrue(agents.issubset(paths), paths)
-                    self.assertIn("/usr/bin", paths)
-                    if activated:
+                if activated:
+                    session.parent.mkdir(parents=True)
+                    session.write_text('export PATH="$HOME/.nix-profile/bin:$PATH"\n')
+                # Simulate a local override that would otherwise shadow Nix tools.
+                (home / ".bashrc.local").write_text('export PATH="/usr/local/bin:$PATH"\n')
+                for interactive in (False, True):
+                    with self.subTest(home_manager=activated, interactive=interactive):
+                        result = subprocess.run(
+                            ["bash", "--noprofile", "--norc", *(["-i"] if interactive else []), "-c",
+                             '. "$1"; printf "%s\\n" "$PATH"', "bash", str(ROOT / "bashrc")],
+                            env=environment, check=True, text=True, capture_output=True,
+                        )
+                        paths = result.stdout.strip().split(os.pathsep)
+                        self.assertTrue(agents.issubset(paths), paths)
+                        self.assertIn("/usr/bin", paths)
                         self.assertIn(str(home / ".nix-profile/bin"), paths)
                         self.assertTrue(legacy.isdisjoint(paths), paths)
-                    else:
-                        self.assertTrue(legacy.issubset(paths), paths)
-                        self.assertLess(paths.index("/home/linuxbrew/.linuxbrew/bin"),
-                                        paths.index("/usr/bin"))
+                        self.assertLess(paths.index(str(home / ".nix-profile/bin")),
+                                        paths.index("/usr/local/bin"))
 
     def test_shell_git_updates_and_legacy_file_retirement(self):
         shell = (ROOT / "bashrc").read_text()

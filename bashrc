@@ -13,13 +13,6 @@ if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
     . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
 elif [ -f "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh" ]; then
     . "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh"
-else
-    # Keep the existing toolchain usable until Home Manager is activated.
-    export PATH="/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:$HOME/.local/share/pnpm:$HOME/.deno/bin:$HOME/.pixi/bin:$PATH"
-    export NVM_DIR="$HOME/.nvm"
-    if [ -s "$NVM_DIR/nvm.sh" ]; then
-        . "$NVM_DIR/nvm.sh"
-    fi
 fi
 
 # Keep agent launchers available without shadowing Nix-provided runtimes.
@@ -77,10 +70,11 @@ if [ -d "$BCBIO" ]; then
     alias bcbio_anaconda="$BCBIO/share/bcbio_nextgen/anaconda/bin/anaconda"
 fi
 
-if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
-    export PATH="$HOME/.nix-profile/bin:$PATH"
-elif [ -f "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh" ]; then
+if [ ! -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ] &&
+   [ -f "/etc/profiles/per-user/$USER/etc/profile.d/hm-session-vars.sh" ]; then
     export PATH="/etc/profiles/per-user/$USER/bin:$PATH"
+else
+    export PATH="$HOME/.nix-profile/bin:$PATH"
 fi
 
 # Custom aliases

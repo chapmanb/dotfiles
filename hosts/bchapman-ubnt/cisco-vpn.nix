@@ -2,6 +2,8 @@
 
 let
   # Proprietary Cisco Secure Client 5.1 stays outside the world-readable store.
+  # Cisco also requires the installer's public root certificates in
+  # /opt/.cisco/certificates/ca; the system CA bundle alone is insufficient.
   runtime = pkgs.buildFHSEnv {
     name = "cisco-secureclient-fhs";
     targetPkgs = p: with p; [

@@ -1,26 +1,85 @@
-"""Read-only migration preflights and explicit, human-operated cutover runbooks."""
+"""Backup-gated Ubuntu Host Base simplification with offline-safe previews."""
 
 import argparse
 from datetime import datetime, timedelta, timezone
+import errno
+import fnmatch
 import json
 import os
 from pathlib import Path
-import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
-from .cold_archive import ArchiveError, read_receipts
 from .daily_backup import BROWSABLE_REMOTE, BROWSABLE_ROOTS, RESTIC_REPOSITORY
 from .runner import CommandRunner
 
 
-MIN_FREE_BYTES = 150 * 1024 ** 3
 MAX_BACKUP_AGE = timedelta(hours=48)
 CLIENT_ASSETS = (
     "bin/vpnagentd", "bin/vpn", "bin/vpnui", "bin/acwebhelper",
     "vpn/profile/ginkgo-corp-profile.xml", "AnyConnectLocalPolicy.xml",
 )
+CORPORATE_SERVICES = (
+    "centrifydc", "cisco-amp", "vpnagentd", "ir_agent", "drivestrike",
+    "connectwisecontrol-a8194903625f6c0d",
+)
+MIGRATED_BINARIES = (
+    "ghostty", "brave", "libreoffice", "inkscape", "redshift", "redshift-gtk",
+    "gcloud", "gh", "task", "glow", "lazygit", "gitu", "mdbook", "pandoc",
+    "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
+    "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",
+    "ncdu", "parallel", "datamash", "tree", "fx",
+)
+RELOCATED_SCRIPTS = ("gws", "fix_docker_vpn.sh", "fix_docker_vpn_chris.sh")
+PRESERVED_LAUNCHERS = frozenset((
+    "claude", "codex", "herdr", "pibox", "nori-auth", "skills-curl", "skills-curl.ps1",
+    "catalyst-agent-hook-runner", "catalyst-agent-skills-auth", "keyring", "poetry",
+    "python3.12", *RELOCATED_SCRIPTS,
+))
+PROTECTED_HOST_PACKAGES = frozenset((
+    "ubuntu-desktop", "gdm3", "gnome-shell", "gnome-terminal", "network-manager",
+    "docker-ce", "docker-ce-cli", "containerd.io", "docker-buildx-plugin",
+    "docker-compose-plugin", "openssh-server", "google-chrome-stable", "zoom",
+    "centrifydc", "centrifydc-openssl", "centrifydc-openldap", "centrifydc-curl",
+    "ciscoampconnector", "cisco-orbital", "drivestrike",
+    "connectwisecontrol-a8194903625f6c0d", "dev42-lx-agent", "auditd", "lvm2",
+    "cryptsetup", "cryptsetup-bin", "cryptsetup-initramfs", "grub-common",
+    "grub-efi-amd64-signed", "shim-signed", "linux-image-generic-hwe-20.04",
+    "intel-microcode", "oem-sutton.newell-meta", "oem-sutton.newell-aekerley-meta",
+))
+# Vendor updates may introduce new package suffixes; protect those families too.
+PROTECTED_PACKAGE_PATTERNS = (
+    "centrifydc*", "cisco*", "connectwisecontrol*", "rapid7*", "insightagent*",
+    "cryptsetup*", "grub*", "linux-image*", "oem-sutton.newell-*",
+)
+RETIRED_PACKAGE_PATTERNS = (
+    "mysql-server*", "postgresql*", "openvpn", "mongodb-org*", "virtualbox-7.0",
+    "wine-stable-amd64", "typedb*", "code", "code-insiders", "antigravity",
+    "brave-browser", "teams", "firefox", "libreoffice*", "inkscape", "shutter", "peek",
+    "nodejs", "snowflake-cli", "glab", "gh", "task", "glow", "k9s", "pandoc",
+    "ncbi-blast+", "samtools", "openbabel*", "gfortran", "coinor-libipopt-dev",
+    "liblapack-dev", "libblas-dev", "libmysqlclient-dev", "cython3", "cargo",
+    "mkvtoolnix", "lynx", "mosh", "silversearcher-ag", "sox", "redshift",
+    "redshift-gtk", "dconf-editor", "gifsicle", "python3.9*", "python3.10*",
+    "python3.11*", "ripgrep", "fzf", "jq", "zstd", "tmux", "xclip", "snapd",
+)
+APPROVED_APT_SOURCES = frozenset((
+    "artifactory-centrify2.list",
+    "artifactory_releng_ginkgo_zone_artifactory_ubuntu_local.list",
+    "drivestrike.list", "docker.list", "google-chrome.sources",
+    "oem-sutton.newell-aekerley-meta.list",
+))
+RETIRED_LOCAL_PATTERNS = (
+    "aws*", "bb", "clj*", "clojure*", "lein", "nvim", "rclone", "snow", "agy",
+    "Erdos*", "Cursor*", "cursor*", "orca-linux.AppImage", "jbrowse*", "joker",
+    "cloud-nuke", "gdrive", "datomic*", "assume-role", *RELOCATED_SCRIPTS,
+)
+GIT_VERSION = "1:2.25.1-1ubuntu3.14"
+BRIDGE_CONFIG = "etc/tmpfiles.d/nix-opengl-driver.conf"
+BRIDGE_CONTENT = "L+ /run/opengl-driver - - - - /home/bchapman/.local/state/nix-opengl-driver\n"
+SNAP_PIN = "Package: snapd\nPin: release *\nPin-Priority: -10\n"
 
 
 class GateError(Exception):
@@ -36,8 +95,8 @@ def require_backup(report_path, home):
     if verified_at.tzinfo is None:
         raise GateError("Daily-backup verification timestamp must include a timezone")
     age = datetime.now(timezone.utc) - verified_at
-    if age < timedelta(0) or age > MAX_BACKUP_AGE:
-        raise GateError("Daily-backup verification is stale or future-dated (maximum age: 48 hours)")
+    if age < timedelta(0) or age >= MAX_BACKUP_AGE:
+        raise GateError("Daily-backup verification is stale or future-dated (must be <48 hours)")
     snapshot = report.get("Snapshot Backup", {})
     browsable = report.get("Browsable Sync", {})
     if (snapshot.get("status") != "VERIFIED" or snapshot.get("snapshot_count", 0) < 1
@@ -51,171 +110,300 @@ def require_backup(report_path, home):
         raise GateError("Daily-backup verification does not cover every browsable root")
 
 
-def require_receipts(receipt):
-    if not receipt.is_file():
-        raise GateError("Missing verified-archives.json")
-    if any(item.get("status") != "VERIFIED" for item in read_receipts(receipt)):
-        raise GateError("verified-archives.json contains unverified entries")
+def flake_uri(args):
+    return "git+" + args.flake.as_uri()
 
 
-def require_client(candidates):
-    for client in candidates:
-        if all((client / asset).is_file() and (client / asset).stat().st_size > 0
+def require_nix_profile(args, runner):
+    uri = flake_uri(args)
+    expression = f"(builtins.getFlake {json.dumps(uri)}).outPath"
+    source = Path(runner.run([
+        "nix", "eval", "--raw", "--impure", "--expr", expression,
+    ]).stdout.strip())
+    if not source.is_absolute() or not source.is_dir():
+        raise GateError("Nix did not return an evaluated flake source directory")
+    if (source / "tmp").exists() or (source / "tmp").is_symlink():
+        raise GateError("Ignored tmp artifacts exist in the evaluated flake store source")
+    target = f'{uri}#homeConfigurations."bchapman@bchapman-ubnt".activationPackage'
+    paths = runner.run(["nix", "build", "--no-link", "--print-out-paths", target]).stdout.splitlines()
+    if len(paths) != 1 or not Path(paths[0]).is_absolute():
+        raise GateError("Nix did not return one Home Manager activation package")
+    profile = Path(paths[0]) / "home-path"
+    missing = [name for name in MIGRATED_BINARIES
+               if not (profile / "bin" / name).is_file()
+               or not os.access(profile / "bin" / name, os.X_OK)]
+    if missing:
+        raise GateError("Missing migrated Nix binaries: " + ", ".join(missing))
+    return str(profile)
+
+
+def require_corporate_stack(args, runner):
+    client = args.system_root / "opt/cisco/secureclient"
+    if not all((client / asset).is_file() and (client / asset).stat().st_size > 0
                and (not asset.startswith("bin/") or os.access(client / asset, os.X_OK))
                for asset in CLIENT_ASSETS):
-            return str(client)
-    raise GateError("Cisco Secure Client 5.1 assets are missing; stage binaries, policy, and ginkgo-corp-profile.xml")
+        raise GateError("Cisco Secure Client assets are missing or not executable")
+    certificates = args.system_root / "usr/local/share/ca-certificates"
+    if not any(path.is_file() and path.stat().st_size > 0 for path in certificates.glob("*.crt")):
+        raise GateError("Corporate Endpoint Stack CA certificates are missing")
+    for service in CORPORATE_SERVICES:
+        result = runner.run(["systemctl", "is-active", service])
+        if result.stdout.strip() != "active":
+            raise GateError(f"Corporate Endpoint Stack service is not active: {service}")
 
 
-def preflight_stage1(args, runner):
-    runner.run(["nix", "build", "--no-link",
-                f"{args.flake}#homeConfigurations.bchapman@bchapman-ubnt.activationPackage"])
-    return {"home_manager_build": "PASSED"}
-
-
-def preflight_stage2(args, runner):
-    # The gate is deliberately on the running Ubuntu root, not a configurable
-    # scratch path that might reside on another filesystem.
-    free = shutil.disk_usage("/").free
-    if free < MIN_FREE_BYTES:
-        raise GateError(f"Free space on / is below 150 GiB ({free / 1024 ** 3:.1f} GiB)")
-    require_receipts(args.receipt)
+def preflight_ubuntu(args, runner):
     require_backup(args.backup_report, args.home)
-    client = require_client([
-        args.system_root / "opt/cisco/secureclient",
-        args.corp_stage / "opt/cisco/secureclient",
-    ])
-    runner.run(["nixos-rebuild", "dry-build", "--flake", f"{args.flake}#bchapman-ubnt"])
-    return {"free_bytes": free, "archives": "VERIFIED", "daily_backup": "VERIFIED",
-            "cisco_assets": client, "nixos_dry_build": "PASSED"}
+    profile = require_nix_profile(args, runner)
+    require_corporate_stack(args, runner)
+    return {"daily_backup": "VERIFIED", "home_manager_profile": profile,
+            "corporate_endpoint_stack": "VERIFIED"}
 
 
-def cutover_runbook(args):
-    flake = shlex.quote(f"{args.flake}#bchapman-ubnt")
-    return f"""# MANUAL ONLY: rerun preflight-stage2 successfully on Ubuntu immediately before shutdown.
-# Boot a NixOS live USB in UEFI mode; use a root HOST shell, never pibox.
-# Keep an off-disk verified restore and boot/EFI backup. Do not format /boot or the ESP.
-cryptsetup open /dev/disk/by-uuid/d03d0617-22d4-4e07-9db5-7fce1563fcc9 nvme0n1p3_crypt
-vgchange -ay vgubuntu
-lsblk -f
-lvs -o lv_name,lv_size,vg_free
-# STOP if /dev/vgubuntu/root is mounted anywhere (including live-USB automounts).
-findmnt -S /dev/vgubuntu/root
-# Inspect minimum size and choose UBUNTU_SIZE_GIB with ample headroom above used data.
-# Choose NIXOS_SIZE_GIB within the resulting VG free space. No sizes are guessed here.
-resize2fs -P /dev/vgubuntu/root
-: "${{UBUNTU_SIZE_GIB:?Set reviewed Ubuntu target GiB}}"
-: "${{NIXOS_SIZE_GIB:?Set reviewed NixOS target GiB}}"
-e2fsck -f /dev/vgubuntu/root
-# STOP on errors; never pass --force or --yes to lvreduce.
-lvreduce --resizefs -L "${{UBUNTU_SIZE_GIB}}G" /dev/vgubuntu/root
-lvcreate -n nixos -L "${{NIXOS_SIZE_GIB}}G" vgubuntu
-# Confirm this is the NEW LV before formatting. Never format vgubuntu/root.
-mkfs.ext4 /dev/vgubuntu/nixos
-mount /dev/vgubuntu/nixos /mnt
-mkdir -p /mnt/boot /mnt/mnt/ubuntu
-mount /dev/disk/by-uuid/2b2de632-f678-4b85-9f70-580470793b52 /mnt/boot
-mkdir -p /mnt/boot/efi /mnt/boot/nixos
-mount /dev/disk/by-uuid/F64B-C7D5 /mnt/boot/efi
-mount /dev/vgubuntu/root /mnt/mnt/ubuntu
-# Make the flake available at the reviewed path below in the live environment.
-nixos-install --flake {flake}
-# Set a login password before reboot: nixos-enter --root /mnt -c 'passwd bchapman'
-# Validate BOTH EFI boot entries, GNOME, VPN login/DNS/routes, uv/pixi, agents,
-# bind mounts and a fresh daily-backup verify before considering Ubuntu retirement.
-# Workspace data still lives on Ubuntu: migrate it and remove bind dependencies FIRST.
-"""
+def matches(name, patterns):
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns)
 
 
-def retirement_runbook(args, runner):
-    require_backup(args.backup_report, args.home)
-    if not (args.vpn_validated and args.workflows_validated and args.workspace_migrated):
-        raise GateError("Ubuntu retirement requires --vpn-validated --workflows-validated --workspace-migrated")
-    mounts = json.loads(runner.run(["findmnt", "--json", "--output", "SOURCE,TARGET"]).stdout)
-
-    def uses_ubuntu(filesystems):
-        for mount in filesystems:
-            source = mount.get("source", "")
-            if source.startswith(("/dev/mapper/vgubuntu-root", "/dev/vgubuntu/root")):
-                return True
-            if uses_ubuntu(mount.get("children", [])):
-                return True
+def legacy_pip_script(path):
+    if not path.is_file() or path.is_symlink():
         return False
+    with path.open("rb") as stream:
+        shebang = stream.readline(512)
+    if not shebang.startswith(b"#!"):
+        return False
+    command = shebang[2:].strip().split()
+    if not command:
+        return False
+    interpreter = command[0]
+    # Ubuntu Focal's unversioned host interpreter is also Python 3.8.
+    return (interpreter == b"/usr/bin/python3"
+            or interpreter.rsplit(b"/", 1)[-1] in (b"python3.8", b"python3.10"))
 
-    if uses_ubuntu(mounts["filesystems"]):
-        raise GateError("Ubuntu LV still mounted; shared workspace dependencies must be removed first")
-    return "# MANUAL ONLY, live USB root shell after independent restore test and lvs review:\nlvremove /dev/vgubuntu/root\n# Never remove vgubuntu or its LUKS container.\n"
+
+def relocate_user_script(source, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    try:
+        source.unlink()
+    except OSError as error:
+        if error.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+            raise
+        # pibox cannot unlink host files; simplify-ubuntu-host removes originals.
+        return str(source)
+    return None
 
 
-def retire_managers(args, runner, execute):
-    if not args.stage1_validated:
-        raise GateError("Confirm working Nix tools and switched Home Manager with --stage1-validated")
+def remove_user_path(path):
+    if path.is_symlink() or not path.is_dir():
+        path.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(path)
+
+
+def clean_user_space(args, runner, execute):
     require_backup(args.backup_report, args.home)
-    preflight_stage1(args, runner)
-    commands = []
-    for source in (Path("/home/linuxbrew"), args.home / ".nvm"):
-        destination = source.with_name(source.name + ".retired")
-        if not source.exists() and not source.is_symlink():
-            continue
-        if source.is_symlink() or destination.exists() or destination.is_symlink():
-            raise GateError(f"Refusing ambiguous legacy-manager quarantine: {source}")
-        commands.append(["mv", "--", str(source), str(destination)])
+    require_nix_profile(args, runner)
+    local_bin = args.home / ".local/bin"
+    moves = []
+    for name in RELOCATED_SCRIPTS:
+        source = args.system_root / "usr/local/bin" / name
+        destination = local_bin / name
+        if source.exists() and not (destination.exists() or destination.is_symlink()):
+            moves.append((source, destination))
+    removals = [args.home / path for path in (
+        ".nvm.retired", "install", ".local/lib/python3.8", ".local/opt/wezterm",
+        ".dotfiles/tmp/cisco-vm/cisco-probe.qcow2", ".dotfiles/tmp/cisco-vm/runtime",
+    )]
+    if local_bin.is_dir():
+        removals.extend(path for path in sorted(local_bin.iterdir())
+                        if path.name not in PRESERVED_LAUNCHERS
+                        and (path.name in ("agy", "ruff", "wezterm", "wezterm-gui", "wezterm-mux-server")
+                             or legacy_pip_script(path)))
+    removals = [path for path in removals if path.exists() or path.is_symlink()]
+    bashrc = args.home / ".bashrc.local"
+    old_shell = bashrc.read_text() if bashrc.exists() else ""
+    new_shell = "".join(line for line in old_shell.splitlines(keepends=True)
+                        if "install/system/google-cloud-sdk" not in line)
+    deferred = []
     if execute:
+        for source, destination in moves:
+            original = relocate_user_script(source, destination)
+            if original:
+                deferred.append(original)
+        if new_shell != old_shell:
+            bashrc.write_text(new_shell)
+        for path in removals:
+            remove_user_path(path)
+    return {"relocations": [[str(src), str(dst)] for src, dst in moves],
+            "source_removal_deferred_to_host_cleanup": deferred,
+            "remove": list(map(str, removals)), "update_bashrc_local": new_shell != old_shell}
+
+
+def install_host_file(path, content, runner):
+    # Only the install runs as root; Home Manager must keep the user's identity.
+    with tempfile.TemporaryDirectory(prefix="migration-gatekeeper-") as temporary:
+        source = Path(temporary) / path.name
+        source.write_text(content)
+        runner.run(["sudo", "install", "-D", "-m", "0644", str(source), str(path)])
+
+
+def activate_host_bridge(args, runner, execute):
+    result = preflight_ubuntu(args, runner)
+    config = args.system_root / BRIDGE_CONFIG
+    commands = [
+        ["sudo", "systemd-tmpfiles", "--create", str(config)],
+        ["home-manager", "switch", "--flake", f"{flake_uri(args)}#bchapman@bchapman-ubnt"],
+    ]
+    if execute:
+        install_host_file(config, BRIDGE_CONTENT, runner)
         for command in commands:
             runner.run(command)
-    return {"quarantine_commands": commands}
+    return {**result, "write": {str(config): BRIDGE_CONTENT}, "commands": commands}
+
+
+def protected_package(name):
+    name = name.split(":", 1)[0]
+    return name in PROTECTED_HOST_PACKAGES or matches(name, PROTECTED_PACKAGE_PATTERNS)
+
+
+def guard_apt(runner, arguments):
+    output = runner.run(["apt-get", "-s", *arguments]).stdout
+    for line in output.splitlines():
+        fields = line.split()
+        if len(fields) >= 2 and fields[0] in ("Remv", "Purg") and protected_package(fields[1]):
+            raise GateError(f"Protected Host Package Guard refused removal of {fields[1]}")
+
+
+def installed_packages(runner):
+    output = runner.run(["dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\\n"]).stdout
+    installed, residual = [], []
+    for line in output.splitlines():
+        name, status = line.split("\t", 1)
+        if status.startswith("ii"):
+            installed.append(name)
+        elif status.startswith("rc"):
+            residual.append(name)
+    return installed, residual
+
+
+def host_removals(args):
+    paths = [args.system_root / path for path in (
+        "home/linuxbrew.retired", "usr/local/aws-cli", "usr/local/share/Antigravity-x64",
+    )]
+    directory = args.system_root / "usr/local/bin"
+    if directory.is_dir():
+        for path in sorted(directory.iterdir()):
+            if path.name in RELOCATED_SCRIPTS and path.exists():
+                if not (args.home / ".local/bin" / path.name).is_file():
+                    raise GateError(f"Run clean-user-space before removing {path.name}")
+            if matches(path.name, RETIRED_LOCAL_PATTERNS) or (path.is_symlink() and not path.exists()):
+                paths.append(path)
+    sources = args.system_root / "etc/apt/sources.list.d"
+    if sources.is_dir():
+        paths.extend(path for path in sorted(sources.iterdir())
+                     if path.name not in APPROVED_APT_SOURCES
+                     and matches(path.name, ("*.list", "*.sources", "*.save")))
+    return [path for path in paths if path.exists() or path.is_symlink()]
+
+
+def snap_removal_commands(runner):
+    rows = runner.run(["snap", "list", "--all"]).stdout.splitlines()[1:]
+    names = {row.split()[0] for row in rows if row.strip()}
+    # Remove apps before content providers and bases, and snapd itself last.
+    def removal_order(name):
+        if name == "snapd":
+            return (3, name)
+        if name == "bare" or name.startswith("core"):
+            return (2, name)
+        if name.startswith(("gnome-", "gtk-", "kde-", "mesa-")):
+            return (1, name)
+        return (0, name)
+    return [["sudo", "snap", "remove", "--purge", name]
+            for name in sorted(names, key=removal_order)]
+
+
+def simplify_ubuntu_host(args, runner, execute):
+    result = preflight_ubuntu(args, runner)
+    installed, residual = installed_packages(runner)
+    candidates = [name for name in installed
+                  if matches(name.split(":", 1)[0], RETIRED_PACKAGE_PATTERNS)]
+    purge = ["purge", *candidates] if candidates else []
+    residual_purge = ["purge", *residual] if residual else []
+    # Refuse known dangerous plans before any filesystem or snap changes.
+    for operation in (purge, residual_purge, ["autoremove", "--purge"]):
+        if operation:
+            guard_apt(runner, operation)
+    removals = host_removals(args)
+    snaps = snap_removal_commands(runner) if "snapd" in installed else []
+    pin = args.system_root / "etc/apt/preferences.d/no-snapd.pref"
+    downgrade = ["install", "--allow-downgrades", f"git={GIT_VERSION}", f"git-man={GIT_VERSION}"]
+    commands = [*snaps]
+    if removals:
+        commands.append(["sudo", "rm", "--recursive", "--force", "--", *map(str, removals)])
+    if execute:
+        # apt stops package-owned daemons on purge; stop running retired units first.
+        units = runner.run(["systemctl", "list-units", "--type=service", "--state=running",
+                            "--no-legend", "--plain"]).stdout
+        retired_units = [line.split()[0] for line in units.splitlines() if line.strip()
+                         and matches(line.split()[0], ("mysql*", "postgresql*", "openvpn*",
+                                                      "mongod*", "typedb*"))]
+        if retired_units:
+            runner.run(["sudo", "systemctl", "stop", *retired_units])
+        for command in commands:
+            runner.run(command)
+        install_host_file(pin, SNAP_PIN, runner)
+        if purge:
+            guard_apt(runner, purge)
+            runner.run(["sudo", "apt-get", "--yes", *purge])
+        runner.run(["sudo", "apt-get", "update"])
+        guard_apt(runner, downgrade)
+        runner.run(["sudo", "apt-get", "--yes", *downgrade])
+        # Re-simulate against the changed package graph, not just the initial plan.
+        guard_apt(runner, ["autoremove", "--purge"])
+        runner.run(["sudo", "apt-get", "--yes", "autoremove", "--purge"])
+        _, residual = installed_packages(runner)
+        residual_purge = ["purge", *residual] if residual else []
+        if residual_purge:
+            guard_apt(runner, residual_purge)
+            runner.run(["sudo", "apt-get", "--yes", *residual_purge])
+    return {**result, "commands": commands, "purge_packages": candidates,
+            "residual_config_packages": residual, "git_downgrade": downgrade,
+            "autoremove": ["apt-get", "autoremove", "--purge"], "write": {str(pin): SNAP_PIN}}
 
 
 def main(argv=None, runner=None):
-    # Shared options work both before and after the subcommand.
     common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
-    common.add_argument("--home", type=Path)
-    common.add_argument("--flake", type=Path)
-    common.add_argument("--receipt", type=Path)
-    common.add_argument("--backup-report", type=Path)
-    common.add_argument("--corp-stage", type=Path)
-    common.add_argument("--system-root", type=Path)
-    common.add_argument("--dry-run", action="store_true")
-    common.add_argument("--execute", action="store_true")
-    common.add_argument("--confirm", action="store_true")
+    for flag in ("home", "flake", "backup-report"):
+        common.add_argument(f"--{flag}", type=Path)
+    common.add_argument("--system-root", type=Path,
+                        help="Filesystem fixture root only; external commands still target the running host")
+    for flag in ("dry-run", "execute", "confirm"):
+        common.add_argument(f"--{flag}", action="store_true")
     parser = argparse.ArgumentParser(description=__doc__, parents=[common])
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("preflight-stage1", "stage1-retire-legacy-managers", "preflight-stage2",
-                 "print-stage2-cutover-runbook", "retire-ubuntu-lv"):
-        command = commands.add_parser(name, parents=[common])
-        if name == "stage1-retire-legacy-managers":
-            command.add_argument("--stage1-validated", action="store_true")
-        if name == "retire-ubuntu-lv":
-            for flag in ("vpn-validated", "workflows-validated", "workspace-migrated"):
-                command.add_argument(f"--{flag}", action="store_true")
+    for name in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge", "simplify-ubuntu-host"):
+        commands.add_parser(name, parents=[common])
     args = parser.parse_args(argv)
     args.home = getattr(args, "home", Path.home()).absolute()
     args.flake = getattr(args, "flake", args.home / ".dotfiles").absolute()
-    args.receipt = getattr(args, "receipt", Path("verified-archives.json"))
-    state = args.home / ".local/state/daily-backup"
-    args.backup_report = getattr(args, "backup_report", state / "verification.json")
-    args.corp_stage = getattr(args, "corp_stage", state / "corporate-access-stack")
-    args.system_root = getattr(args, "system_root", Path("/"))
+    args.backup_report = getattr(args, "backup_report", args.home / ".local/state/daily-backup/verification.json")
+    args.system_root = getattr(args, "system_root", Path("/")).absolute()
     execute = getattr(args, "execute", False) and not getattr(args, "dry_run", False)
     runner = runner or CommandRunner()
     try:
         if execute and not getattr(args, "confirm", False):
             raise GateError("Host execution requires --execute --confirm")
-        if execute and args.command in ("print-stage2-cutover-runbook", "retire-ubuntu-lv"):
-            raise GateError("LVM operations are manual-only; use the dry-run runbook in a live USB host shell")
-        if args.command == "preflight-stage1":
-            result = preflight_stage1(args, runner)
-        elif args.command == "preflight-stage2":
-            result = preflight_stage2(args, runner)
-        elif args.command == "print-stage2-cutover-runbook":
-            result = {"runbook": cutover_runbook(args)}
-        elif args.command == "retire-ubuntu-lv":
-            result = {"runbook": retirement_runbook(args, runner)}
+        if args.command == "preflight-ubuntu":
+            result = preflight_ubuntu(args, runner)
+        elif args.command == "clean-user-space":
+            result = clean_user_space(args, runner, execute)
+        elif args.command == "activate-host-bridge":
+            result = activate_host_bridge(args, runner, execute)
         else:
-            result = retire_managers(args, runner, execute)
+            result = simplify_ubuntu_host(args, runner, execute)
         print(json.dumps({"status": "EXECUTED" if execute else "DRY_RUN", **result}, indent=2))
         return 0
-    except (GateError, ArchiveError, OSError, ValueError, TypeError, KeyError, AttributeError,
+    except (GateError, OSError, ValueError, TypeError, KeyError, AttributeError,
             subprocess.CalledProcessError) as error:
         message = "External preflight/host command failed" if isinstance(error, subprocess.CalledProcessError) else str(error)
         print(f"migration-gatekeeper: {message}", file=sys.stderr)

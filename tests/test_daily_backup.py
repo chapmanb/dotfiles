@@ -29,7 +29,7 @@ ROOTS = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/n
 SNAPSHOT_PATHS = (
     ".dotfiles", ".ssh", ".gnupg", ".password-store", ".aws", ".kube", ".vpn",
     ".snowflake", ".dbt", ".pypirc", ".bashrc.local", ".bashrc.ginkgo", "secrets.env",
-    "todo.txt", "notes.txt", ".wezterm.lua", ".spacemacs.env", ".agents", ".claude",
+    "todo.txt", "notes.txt", ".spacemacs.env", ".agents", ".claude",
     ".claude.json", ".codex", ".pi/agent", ".gemini", ".config/herdr", ".config/nvim",
     ".config/msmtp", ".config/gspread", ".config/rclone", ".config/autostart",
 )
@@ -229,6 +229,17 @@ class TestDailyBackup(unittest.TestCase):
 
     def rclone_calls(self, operation):
         return [call for call in self.runner.calls if call[0] == "rclone" and call[3] == operation]
+
+    def test_retired_wezterm_config_is_not_a_snapshot_source(self):
+        retired = self.file(self.home / ".wezterm.lua", "retired terminal config")
+        active = self.file(self.home / ".config/nvim/init.lua", "active editor config")
+        self.ok("init")
+        self.ok("run")
+        backup = self.restic_calls("backup")[0]
+        sources = backup[backup.index("--exclude-file") + 2:]
+        self.assertNotIn(str(retired), sources)
+        self.assertNotIn(str(retired), self.runner.snapshot_files)
+        self.assertIn(str(active), self.runner.snapshot_files)
 
     def test_stage_corp_stack_and_restic_init(self):
         result = self.ok("stage-corp-stack")
