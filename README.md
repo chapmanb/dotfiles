@@ -66,12 +66,8 @@ cp -n ~/.config/autostart/gnome-terminal.desktop \
 sudo nixos-rebuild switch --flake '/home/bchapman/.dotfiles#bchapman-ubnt'
 ```
 
-Full-system evaluation currently fails on the existing Cisco VPN service's
-unsupported `requiresMountsFor` option in `hosts/bchapman-ubnt/cisco-vpn.nix`.
-Correct that separate host configuration issue before rebuilding; the Ghostty
-Home Manager configuration itself builds successfully.
-
-After a successful rebuild, log out and back into GNOME. Check that only Ghostty opens automatically,
+After a successful rebuild, log out and back into GNOME. Check that only Ghostty
+opens automatically,
 **Ctrl+Alt+T** opens Ghostty, and `gnome-terminal` still works manually. The shared
 home directory means NixOS activation changes shared files; reapply standalone
 Home Manager if returning to Ubuntu. Reverting the configuration commit and

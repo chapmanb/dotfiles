@@ -36,7 +36,7 @@ in {
 
   systemd.services.cisco-secureclient-hydrate = {
     description = "Hydrate official Cisco Secure Client 5.1 from Ubuntu or restored backup";
-    requiresMountsFor = [ "/mnt/ubuntu" ];
+    unitConfig.RequiresMountsFor = [ "/mnt/ubuntu" ];
     before = [ "vpnagentd.service" ];
     serviceConfig = { Type = "oneshot"; RemainAfterExit = true; UMask = "0077"; };
     path = [ pkgs.coreutils ];

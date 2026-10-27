@@ -110,12 +110,13 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             "ginkgo-corp-profile.xml", "AnyConnectLocalPolicy.xml", "acwebhelper",
             "systemd.services.vpnagentd", "/opt/cisco/secureclient/bin/vpnagentd -execv_instance",
             'pkgs.writeShellScriptBin "vpn"', 'pkgs.writeShellScriptBin "vpnui"',
-            "pkgs.makeDesktopItem", 'requiresMountsFor = [ "/mnt/ubuntu" ];',
+            "pkgs.makeDesktopItem", 'unitConfig.RequiresMountsFor = [ "/mnt/ubuntu" ];',
             'requires = [ "cisco-secureclient-hydrate.service" ];',
             "systemd.tmpfiles.rules", 'cp -a "$source"', 'chown -R root:root',
         ):
             with self.subTest(declaration=declaration):
                 self.assertIn(declaration, vpn)
+        self.assertNotRegex(vpn, r"(?m)^\s*requiresMountsFor\s*=")
         mounts = (ROOT / "hosts/bchapman-ubnt/bind-mounts.nix").read_text()
         directories = re.search(r"directories = \[(.*?)\];", mounts, re.S).group(1)
         self.assertEqual(set(re.findall(r'"([^"]+)"', directories)), set(WORKSPACES))
