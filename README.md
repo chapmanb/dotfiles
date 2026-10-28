@@ -121,8 +121,9 @@ profile with a high-priority entry. It sets `DBusActivatable=false` and uses the
 absolute patched Ghostty executable for launch, `TryExec` and New Window. This
 avoids GNOME requesting a systemd activation unit that is outside the user unit
 search path and uses settings unsupported by Ubuntu's systemd 245. The existing
-icon, single-instance behavior and terminal-launch metadata are retained; no
-systemd service, autostart or shortcut configuration is changed by this override.
+icon, single-instance behavior and terminal-launch metadata are retained. This
+override does not install a Ghostty systemd service or change autostart or
+shortcut configuration.
 The dormant NixOS configuration retains the upstream desktop entry.
 
 Activate from **GNOME Terminal outside pibox**:
