@@ -1,4 +1,4 @@
-{ lib, pkgs, ... }:
+{ config, lib, pkgs, ... }:
 
 let
   ghostty = "${pkgs.ghostty}/bin/ghostty";
@@ -18,6 +18,35 @@ in {
       name = "Ghostty";
       command = ghostty;
       binding = "<Primary><Alt>t";
+    };
+  };
+
+  # Ubuntu's systemd cannot activate Ghostty's packaged user service.
+  xdg.desktopEntries."com.mitchellh.ghostty" = lib.mkIf config.targets.genericLinux.enable {
+    name = "Ghostty";
+    comment = "A terminal emulator";
+    exec = "${ghostty} --gtk-single-instance=true";
+    icon = "com.mitchellh.ghostty";
+    categories = [ "System" "TerminalEmulator" ];
+    terminal = false;
+    startupNotify = true;
+    settings = {
+      Version = "1.0";
+      DBusActivatable = "false";
+      TryExec = ghostty;
+      StartupWMClass = "com.mitchellh.ghostty";
+      Keywords = "terminal;tty;pty;";
+      X-GNOME-UsesNotifications = "true";
+      X-KDE-Shortcuts = "Ctrl+Alt+T";
+      X-TerminalArgExec = "-e";
+      X-TerminalArgTitle = "--title=";
+      X-TerminalArgAppId = "--class=";
+      X-TerminalArgDir = "--working-directory=";
+      X-TerminalArgHold = "--wait-after-command";
+    };
+    actions.new-window = {
+      name = "New Window";
+      exec = "${ghostty} --gtk-single-instance=true";
     };
   };
 

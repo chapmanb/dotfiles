@@ -114,6 +114,31 @@ workflow but does not roll back earlier actions: inspect the preview, retain
 verified off-host backups and rerun preflight after any interruption. No Ubuntu
 release upgrade is performed.
 
+## Ghostty application launcher on Ubuntu
+
+Home Manager overrides `com.mitchellh.ghostty.desktop` in the generic-Linux
+profile with a high-priority entry. It sets `DBusActivatable=false` and uses the
+absolute patched Ghostty executable for launch, `TryExec` and New Window. This
+avoids GNOME requesting a systemd activation unit that is outside the user unit
+search path and uses settings unsupported by Ubuntu's systemd 245. The existing
+icon, single-instance behavior and terminal-launch metadata are retained; no
+systemd service, autostart or shortcut configuration is changed by this override.
+The dormant NixOS configuration retains the upstream desktop entry.
+
+Activate from **GNOME Terminal outside pibox**:
+
+```sh
+home-manager switch --flake 'git+file:///home/bchapman/.dotfiles#bchapman@bchapman-ubnt'
+```
+
+Then select Ghostty in Ubuntu's application launcher and try its New Window
+menu action. When existing work can safely be closed, also test launching after
+all Ghostty windows have exited; a working existing instance alone does not
+prove cold startup. If GNOME still caches the old entry, save work and log out
+and back in before retesting. Do not try to write desktop caches into the
+read-only Nix store. Keep GNOME Terminal available as a fallback. To roll back,
+`git revert` the launcher-override commit and rerun the activation command.
+
 ## Ghostty child runtime isolation
 
 The overlay's `pkgs.ghostty` uses the pinned unstable Ghostty with

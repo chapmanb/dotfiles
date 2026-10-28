@@ -121,6 +121,44 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertNotIn("Hidden=true", login)
         self.assertNotIn("/usr/bin/gnome-terminal", desktop)
 
+    def test_ghostty_desktop_launcher_bypasses_systemd_activation(self):
+        desktop = (ROOT / "home/ghostty.nix").read_text()
+        self.assertIn('ghostty = "${pkgs.ghostty}/bin/ghostty";', desktop)
+        entry = re.search(
+            r'xdg\.desktopEntries\."com\.mitchellh\.ghostty" = '
+            r'lib\.mkIf config\.targets\.genericLinux\.enable \{(.*?)\n  \};',
+            desktop, re.DOTALL,
+        )
+        self.assertIsNotNone(entry, "Ubuntu needs an override of the existing desktop ID")
+        body = entry.group(1)
+        for declaration in (
+            'name = "Ghostty";',
+            'exec = "${ghostty} --gtk-single-instance=true";',
+            'icon = "com.mitchellh.ghostty";',
+            'categories = [ "System" "TerminalEmulator" ];',
+            'terminal = false;',
+            'startupNotify = true;',
+            'Version = "1.0";',
+            'DBusActivatable = "false";',
+            'TryExec = ghostty;',
+            'StartupWMClass = "com.mitchellh.ghostty";',
+            'Keywords = "terminal;tty;pty;";',
+            'X-GNOME-UsesNotifications = "true";',
+            'X-TerminalArgExec = "-e";',
+            'X-TerminalArgTitle = "--title=";',
+            'X-TerminalArgAppId = "--class=";',
+            'X-TerminalArgDir = "--working-directory=";',
+            'X-TerminalArgHold = "--wait-after-command";',
+        ):
+            with self.subTest(declaration=declaration):
+                self.assertIn(declaration, body)
+        self.assertRegex(
+            body,
+            r'actions\.new-window = \{\s*name = "New Window";\s*'
+            r'exec = "\$\{ghostty\} --gtk-single-instance=true";\s*\};',
+        )
+        self.assertNotIn("systemd.user.services", desktop)
+
     def test_ubuntu_uses_native_mime_database(self):
         flake = (ROOT / "flake.nix").read_text()
         standalone = flake.split('homeConfigurations."bchapman@bchapman-ubnt" =', 1)[1]
