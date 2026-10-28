@@ -1,16 +1,18 @@
 diff --git a/src/apprt/gtk/class/surface.zig b/src/apprt/gtk/class/surface.zig
 --- a/src/apprt/gtk/class/surface.zig
 +++ b/src/apprt/gtk/class/surface.zig
-@@ -1576,6 +1576,12 @@
+@@ -1576,7 +1576,13 @@
          env.remove("GDK_DEBUG");
          env.remove("GDK_DISABLE");
          env.remove("GSK_RENDERER");
+-
 +
 +        // Nix wrappers configure Ghostty's runtime, not programs in the terminal.
 +        env.remove("GI_TYPELIB_PATH");
 +        env.remove("GIO_EXTRA_MODULES");
 +        env.remove("GDK_PIXBUF_MODULE_FILE");
 +        env.remove("GST_PLUGIN_SYSTEM_PATH_1_0");
- 
++
          // Remove some environment variables that are set when Ghostty is launched
          // from a `.desktop` file, by D-Bus activation, or systemd.
+         env.remove("GIO_LAUNCHED_DESKTOP_FILE");
