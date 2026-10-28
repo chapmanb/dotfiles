@@ -64,6 +64,16 @@ the activation package, checks all migrated executables in its `home-path`,
 and verifies native Cisco assets, local CA certificates and active corporate
 services. Host bridge activation and host simplification rerun this preflight.
 
+For an explicitly accepted DriveStrike health issue, add
+`--allow-inactive-drivestrike` to each preflight/host invocation. This permits only
+its observed `inactive`, `failed`, `activating`, or `deactivating` state; missing
+units and command errors still fail. Results report `VERIFIED_WITH_EXCEPTIONS`
+and `corporate_service_exceptions` with the observed state, not full endpoint
+health. The option does not persist or disable/uninstall DriveStrike: its package
+and APT source remain protected. All other service, asset, backup, confirmation,
+and package-removal checks remain enforced. Restic verifies backups; it does not
+replace endpoint security.
+
 `clean-user-space` checks backup freshness and the built Nix replacements,
 relocates `gws` and the two `fix_docker_vpn*.sh` scripts to `~/.local/bin` without
 overwriting existing launchers, removes retired gcloud shell source lines,
@@ -72,8 +82,12 @@ WezTerm and Cisco VM scratch artifacts. Active agent/auth launchers, Poetry,
 keyring and Python 3.12 are allowlisted. If a destination already exists, the
 original is left for host cleanup. In a read-only pibox mount, scripts are
 copied into the user directory and original removal is explicitly reported as
-deferred to `simplify-ubuntu-host`. Never run the whole gatekeeper under sudo
-(Home Manager and home files must retain the user's identity).
+deferred to `simplify-ubuntu-host`. If pibox also mounts `~/.local/bin` read-only,
+run user cleanup in an unsandboxed host terminal too. When the normal backup
+state is read-only, use `daily-backup --state-dir <writable-directory> verify`
+and pass its real `verification.json` via `--backup-report` to the gatekeeper.
+Never run the whole gatekeeper under sudo (Home Manager and home files must
+retain the user's identity).
 
 `activate-host-bridge` installs the systemd-tmpfiles rule linking
 `/run/opengl-driver` to `/home/bchapman/.local/state/nix-opengl-driver`, creates

@@ -45,6 +45,8 @@ class OfflineRunner:
         self.calls = []
         self.fail_build = False
         self.inactive_service = None
+        self.inactive_state = "inactive"
+        self.service_exit_code = 3
         self.purge_output = ""
         self.autoremove_output = ""
         self.late_autoremove_output = ""
@@ -62,7 +64,10 @@ class OfflineRunner:
                 raise subprocess.CalledProcessError(1, args, stderr="private failure")
             output = str(self.activation) + "\n"
         elif args[:2] == ["systemctl", "is-active"]:
-            output = "inactive" if args[2] == self.inactive_service else "active\n"
+            output = self.inactive_state + "\n" if args[2] == self.inactive_service else "active\n"
+            if args[2] == self.inactive_service and self.service_exit_code:
+                raise subprocess.CalledProcessError(self.service_exit_code, args,
+                                                    output=output, stderr="private service detail")
         elif args[0] == "dpkg-query":
             output = self.packages
         elif args[:2] == ["apt-get", "-s"]:
@@ -303,6 +308,75 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         code, _, errors = self.invoke("preflight-ubuntu")
         self.assertEqual(code, 1)
         self.assertNotIn("private failure", errors)
+
+    def test_explicit_drivestrike_health_exception_preserves_other_gates(self):
+        flag = "--allow-inactive-drivestrike"
+        self.runner.inactive_service = "drivestrike"
+        for state in ("inactive", "failed", "activating", "deactivating"):
+            self.runner.inactive_state = state
+            for command in ("preflight-ubuntu", "activate-host-bridge", "simplify-ubuntu-host"):
+                with self.subTest(state=state, command=command):
+                    self.assertEqual(self.invoke(command)[0], 1)
+                    code, output, errors = self.invoke(command, flag)
+                    self.assertEqual(code, 0, errors)
+                    result = json.loads(output)
+                    self.assertEqual(result["corporate_endpoint_stack"], "VERIFIED_WITH_EXCEPTIONS")
+                    self.assertEqual(result["corporate_service_exceptions"], {"drivestrike": state})
+                    self.assertEqual(result["daily_backup"], "VERIFIED")
+        self.assert_no_host_mutations()
+
+        for state, exit_code in (("unknown", 4), ("activating", 1), ("unknown", 3), ("", 3)):
+            with self.subTest(state=state, exit_code=exit_code):
+                self.runner.inactive_state = state
+                self.runner.service_exit_code = exit_code
+                code, _, errors = self.invoke("preflight-ubuntu", flag)
+                self.assertEqual(code, 1)
+                self.assertNotIn("private service detail", errors)
+        self.runner.service_exit_code = 3
+        self.runner.inactive_state = "inactive"
+        for service in gatekeeper.CORPORATE_SERVICES:
+            if service != "drivestrike":
+                self.runner.inactive_service = service
+                self.assertIn(service, self.invoke("preflight-ubuntu", flag)[2])
+
+        self.runner.inactive_service = None
+        for arguments in (("preflight-ubuntu", flag), (flag, "preflight-ubuntu"), ("preflight-ubuntu",)):
+            code, output, errors = self.invoke(*arguments)
+            self.assertEqual(code, 0, errors)
+            self.assertEqual(json.loads(output)["corporate_endpoint_stack"], "VERIFIED")
+            self.assertEqual(json.loads(output)["corporate_service_exceptions"], {})
+
+        self.runner.inactive_service = "drivestrike"
+        self.report.write_text(json.dumps({**self.good_report, "Snapshot Backup": {"status": "UNVERIFIED"}}))
+        self.runner.calls.clear()
+        self.assertEqual(self.invoke("preflight-ubuntu", flag)[0], 1)
+        self.assertEqual(self.runner.calls, [])
+        self.report.write_text(json.dumps(self.good_report))
+        asset = self.system / "opt/cisco/secureclient/bin/vpnagentd"
+        asset.write_text("")
+        self.assertIn("Cisco", self.invoke("preflight-ubuntu", flag)[2])
+        self.make_file(asset)
+        certificate = self.system / "usr/local/share/ca-certificates/ginkgo.crt"
+        certificate.unlink()
+        self.assertIn("CA certificates", self.invoke("preflight-ubuntu", flag)[2])
+        self.make_file(certificate)
+        binary = self.activation / "home-path/bin/ghostty"
+        binary.unlink()
+        self.assertIn("ghostty", self.invoke("preflight-ubuntu", flag)[2])
+        self.make_file(binary)
+
+        self.runner.purge_output = "Remv drivestrike [1.0]\n"
+        code, _, errors = self.invoke("simplify-ubuntu-host", flag, "--execute", "--confirm")
+        self.assertEqual(code, 1)
+        self.assertIn("Protected Host Package Guard refused removal of drivestrike", errors)
+        self.assertIn("drivestrike.list", gatekeeper.APPROVED_APT_SOURCES)
+        self.assert_no_host_mutations()
+
+        code, output, errors = self.invoke("activate-host-bridge", flag, "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["corporate_service_exceptions"], {"drivestrike": "inactive"})
+        self.assertTrue(any(call[:2] == ["home-manager", "switch"] for call in self.runner.calls))
+        self.assertFalse(any(call[:2] == ["sudo", "systemctl"] for call in self.runner.calls))
 
     def test_all_commands_require_fresh_complete_daily_backup_before_external_commands(self):
         for bad_report in (

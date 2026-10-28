@@ -146,18 +146,31 @@ def require_corporate_stack(args, runner):
     certificates = args.system_root / "usr/local/share/ca-certificates"
     if not any(path.is_file() and path.stat().st_size > 0 for path in certificates.glob("*.crt")):
         raise GateError("Corporate Endpoint Stack CA certificates are missing")
+    exceptions = {}
     for service in CORPORATE_SERVICES:
-        result = runner.run(["systemctl", "is-active", service])
-        if result.stdout.strip() != "active":
-            raise GateError(f"Corporate Endpoint Stack service is not active: {service}")
+        try:
+            state = runner.run(["systemctl", "is-active", service]).stdout.strip()
+        except subprocess.CalledProcessError as error:
+            if error.returncode != 3:
+                raise
+            state = (error.stdout or "").strip()
+        if state == "active":
+            continue
+        if (service == "drivestrike" and getattr(args, "allow_inactive_drivestrike", False)
+                and state in ("inactive", "failed", "activating", "deactivating")):
+            exceptions[service] = state
+            continue
+        raise GateError(f"Corporate Endpoint Stack service is not active: {service}")
+    return exceptions
 
 
 def preflight_ubuntu(args, runner):
     require_backup(args.backup_report, args.home)
     profile = require_nix_profile(args, runner)
-    require_corporate_stack(args, runner)
+    exceptions = require_corporate_stack(args, runner)
     return {"daily_backup": "VERIFIED", "home_manager_profile": profile,
-            "corporate_endpoint_stack": "VERIFIED"}
+            "corporate_endpoint_stack": "VERIFIED_WITH_EXCEPTIONS" if exceptions else "VERIFIED",
+            "corporate_service_exceptions": exceptions}
 
 
 def matches(name, patterns):
@@ -377,6 +390,8 @@ def main(argv=None, runner=None):
         common.add_argument(f"--{flag}", type=Path)
     common.add_argument("--system-root", type=Path,
                         help="Filesystem fixture root only; external commands still target the running host")
+    common.add_argument("--allow-inactive-drivestrike", action="store_true",
+                        help="Report and allow only DriveStrike's nonactive state; keep the agent installed")
     for flag in ("dry-run", "execute", "confirm"):
         common.add_argument(f"--{flag}", action="store_true")
     parser = argparse.ArgumentParser(description=__doc__, parents=[common])
