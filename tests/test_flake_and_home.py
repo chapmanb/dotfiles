@@ -167,7 +167,7 @@ class TestFlakeAndHome(unittest.TestCase):
         )
         self.assertIsNotNone(entry, "Ghostty's active config filename must be managed")
         settings = [line.strip() for line in entry.group(1).splitlines() if line.strip()]
-        self.assertEqual(settings, ["font-family = JetBrains Mono", "font-size = 13"])
+        self.assertEqual(settings, ["font-family = JetBrains Mono", "font-size = 11"])
         self.assertNotIn('"ghostty/config.ghostty".force', desktop)
         home = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)

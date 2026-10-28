@@ -138,9 +138,10 @@ reactivate Home Manager and start a fresh shell.
 
 Home Manager installs `pkgs.jetbrains-mono`, enables profile font discovery
 through `fonts.fontconfig.enable`, and manages `~/.config/ghostty/config.ghostty`
-with JetBrains Mono at 13 points. The nominal size matches the previous terminal
-preference; GNOME's font settings and global font aliases are not changed. This
-uses the regular font package, not a Nerd Font variant or an ad-hoc download.
+with JetBrains Mono at 11 points, visually matched to the previous GNOME Terminal
+prompt. Equal point sizes across different font families did not look equal.
+GNOME's font settings and global font aliases are not changed. This uses the
+regular font package, not a Nerd Font variant or an ad-hoc download.
 
 Activate from **GNOME Terminal outside pibox**, preserving an existing unmanaged
 config with a backup suffix:
@@ -155,8 +156,9 @@ in the command palette). If a tab had manually adjusted zoom, press **Ctrl+0**
 to reset to the configured size. Compare with GNOME Terminal on the same display;
 the different font and rendering engines may have different apparent sizes.
 If a running instance has cached the old font list, retry in a fresh Ghostty
-process when work can safely be closed; do not terminate working agents. To roll back, revert the font-match
-commit and reactivate; restore the saved unmanaged config if desired.
+process when work can safely be closed; do not terminate working agents. To roll
+back, revert the relevant font-setting commit and reactivate; restore the saved
+unmanaged config if desired.
 
 ## Ghostty application launcher on Ubuntu
 

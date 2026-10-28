@@ -63,7 +63,7 @@ in {
   xdg.configFile = {
     "ghostty/config.ghostty".text = ''
       font-family = JetBrains Mono
-      font-size = 13
+      font-size = 11
     '';
 
     "xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\n";
