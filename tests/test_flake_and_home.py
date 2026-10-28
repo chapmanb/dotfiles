@@ -23,7 +23,7 @@ HOME_PACKAGES = {
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo", "terraform", "terraform-docs", "google-cloud-sdk",
     "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
-    "datamash", "tree", "fx",
+    "datamash", "tree", "fx", "jetbrains-mono",
 }
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
@@ -159,6 +159,23 @@ class TestFlakeAndHome(unittest.TestCase):
         )
         self.assertNotIn("systemd.user.services", desktop)
 
+    def test_ghostty_jetbrains_mono_font_is_nix_managed(self):
+        desktop = (ROOT / "home/ghostty.nix").read_text()
+        entry = re.search(
+            r'"ghostty/config\.ghostty"\.text = \'\'(.*?)\'\';',
+            desktop, re.DOTALL,
+        )
+        self.assertIsNotNone(entry, "Ghostty's active config filename must be managed")
+        settings = [line.strip() for line in entry.group(1).splitlines() if line.strip()]
+        self.assertEqual(settings, ["font-family = JetBrains Mono", "font-size = 13"])
+        self.assertNotIn('"ghostty/config.ghostty".force', desktop)
+        home = (ROOT / "home/default.nix").read_text()
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        self.assertIn("jetbrains-mono", packages.group(1).split())
+        self.assertIn("fonts.fontconfig.enable = true;", home)
+        self.assertNotIn("fonts.fontconfig.defaultFonts", home)
+
     def test_ubuntu_uses_native_mime_database(self):
         flake = (ROOT / "flake.nix").read_text()
         standalone = flake.split('homeConfigurations."bchapman@bchapman-ubnt" =', 1)[1]
@@ -222,7 +239,7 @@ class TestFlakeAndHome(unittest.TestCase):
         home = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
-        self.assertEqual(len(HOME_PACKAGES), 63)
+        self.assertEqual(len(HOME_PACKAGES), 64)
         self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
         self.assertIn('".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;', home)
         for source in ("flake.nix", "home/default.nix", "lib/dotfiles_migrate/daily_backup.py"):
