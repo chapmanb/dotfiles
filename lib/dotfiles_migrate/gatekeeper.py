@@ -287,6 +287,11 @@ def guard_apt(runner, arguments):
             raise GateError(f"Protected Host Package Guard refused removal of {fields[1]}")
 
 
+def residual_purge_arguments(residual):
+    candidates = [name for name in residual if not protected_package(name)]
+    return ["purge", *candidates] if candidates else []
+
+
 def installed_packages(runner):
     output = runner.run(["dpkg-query", "-W", "-f=${binary:Package}\t${db:Status-Abbrev}\\n"]).stdout
     installed, residual = [], []
@@ -341,7 +346,7 @@ def simplify_ubuntu_host(args, runner, execute):
     candidates = [name for name in installed
                   if matches(name.split(":", 1)[0], RETIRED_PACKAGE_PATTERNS)]
     purge = ["purge", *candidates] if candidates else []
-    residual_purge = ["purge", *residual] if residual else []
+    residual_purge = residual_purge_arguments(residual)
     # Refuse known dangerous plans before any filesystem or snap changes.
     for operation in (purge, residual_purge, ["autoremove", "--purge"]):
         if operation:
@@ -375,12 +380,14 @@ def simplify_ubuntu_host(args, runner, execute):
         guard_apt(runner, ["autoremove", "--purge"])
         runner.run(["sudo", "apt-get", "--yes", "autoremove", "--purge"])
         _, residual = installed_packages(runner)
-        residual_purge = ["purge", *residual] if residual else []
+        residual_purge = residual_purge_arguments(residual)
         if residual_purge:
             guard_apt(runner, residual_purge)
             runner.run(["sudo", "apt-get", "--yes", *residual_purge])
     return {**result, "commands": commands, "purge_packages": candidates,
-            "residual_config_packages": residual, "git_downgrade": downgrade,
+            "residual_config_packages": residual,
+            "preserved_protected_residuals": [name for name in residual if protected_package(name)],
+            "git_downgrade": downgrade,
             "autoremove": ["apt-get", "autoremove", "--purge"], "write": {str(pin): SNAP_PIN}}
 
 

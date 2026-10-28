@@ -105,7 +105,11 @@ names. It rechecks immediately before purging/autoremoving and also guards the
 Git downgrade. It removes retired `/usr/local` entries and Linuxbrew, all snaps,
 and unused packages; pins snapd at priority -10; retains only the six approved
 corporate/Docker/Chrome/OEM APT source files; restores stock Focal Git/git-man
-`1:2.25.1-1ubuntu3.14`; and purges residual configurations. A failure stops the
+`1:2.25.1-1ubuntu3.14`; and purges unprotected residual configurations. Already
+uninstalled protected packages (including old kernel images) retain their
+configuration and are listed in `preserved_protected_residuals`; the guard still
+refuses any protected removal APT proposes. This deliberately leaves those `rc`
+records rather than claiming a completely residual-free host. A failure stops the
 workflow but does not roll back earlier actions: inspect the preview, retain
 verified off-host backups and rerun preflight after any interruption. No Ubuntu
 release upgrade is performed.

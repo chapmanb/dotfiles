@@ -574,18 +574,46 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         index = self.runner.calls.index(autoremove)
         self.assertEqual(self.runner.calls[index - 1], ["apt-get", "-s", "autoremove", "--purge"])
 
-    def test_autoremove_is_reguarded_after_purge_and_new_residuals_are_guarded(self):
+    def test_autoremove_is_reguarded_after_purge(self):
         self.runner.late_autoremove_output = "Remv docker-ce [1.0]\n"
         code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
         self.assertEqual(code, 1)
         self.assertIn("docker-ce", errors)
         self.assertNotIn(["sudo", "apt-get", "--yes", "autoremove", "--purge"], self.runner.calls)
+
+    def test_protected_residual_configs_are_preserved_not_purged(self):
+        protected = ["linux-image-5.14.0-1036-oem", "drivestrike", "ubuntu-desktop"]
+        self.runner.packages = "old-config\trc \n" + "".join(f"{name}\trc \n" for name in protected)
+        code, output, errors = self.invoke("simplify-ubuntu-host")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["preserved_protected_residuals"], protected)
+        self.assertIn(["apt-get", "-s", "purge", "old-config"], self.runner.calls)
+        self.assert_no_host_mutations()
+
+        self.runner.calls.clear()
+        initial = (["gh"], [protected[0], "old-config"])
+        later = ([], [*protected, "old-config", "new-config"])
+        with patch.object(gatekeeper, "installed_packages", side_effect=[initial, later]):
+            code, output, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["preserved_protected_residuals"], protected)
+        self.assertIn(["sudo", "apt-get", "--yes", "purge", "old-config", "new-config"], self.runner.calls)
+        for call in self.runner.calls:
+            if "purge" in call:
+                self.assertFalse(set(protected).intersection(call), call)
+
         self.runner = OfflineRunner(self.root, self.source, self.activation)
-        self.runner.packages = "ubuntu-desktop\trc \n"
+        self.runner.packages = "drivestrike\trc \n"
+        code, output, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["preserved_protected_residuals"], ["drivestrike"])
+        self.assertFalse(any("purge" in call for call in self.runner.calls))
+
+        self.runner = OfflineRunner(self.root, self.source, self.activation)
         self.runner.purge_output = "Purg ubuntu-desktop [1.0]\n"
         code, _, errors = self.invoke("simplify-ubuntu-host", "--execute", "--confirm")
         self.assertEqual(code, 1)
-        self.assertIn("ubuntu-desktop", errors)
+        self.assertIn("Protected Host Package Guard", errors)
         self.assert_no_host_mutations()
 
     def test_all_commands_default_to_dry_run_and_require_confirmation(self):
