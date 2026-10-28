@@ -47,7 +47,6 @@ export HISTCONTROL=erasedups
 shopt -s histappend
 export HISTSIZE=10000000
 export HISTFILESIZE=10000000
-export PROMPT_COMMAND="history -a;$PROMPT_COMMAND"
 __reload_history ()
 [[ -f ~/.fzf.bash ]] && source ~/.fzf.bash
 
@@ -108,9 +107,38 @@ fi
 # make less more friendly for non-text input files, see lesspipe(1)
 [ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
 
-if [ -f ~/.dotfiles/shell/liquidprompt/liquidprompt ]; then
-    source ~/.dotfiles/shell/liquidprompt/liquidprompt
-fi
+__dotfiles_prompt() {
+    local status=$? identity=''
+    if [[ -n ${SSH_CONNECTION-} || -n ${SSH_TTY-} ]]; then
+        identity='\h'
+    fi
+    if (( EUID == 0 )); then
+        identity="\\u${identity:+@$identity}"
+    fi
+
+    # Built-in prompt escapes keep directory and host names out of shell code.
+    PS1='\[\e[1m\]['"$identity"'\[\e[32m\]:\[\e[0;1m\]\w\[\e[0m\]] '
+    if (( status != 0 )); then
+        PS1+='\[\e[35m\]'"$status"'\[\e[0m\] '
+    fi
+    PS1+='\[\e[1m\]\$\[\e[0m\] '
+    history -a
+    return "$status"
+}
+
+# Run before other hooks and preserve their status, type and registration.
+__dotfiles_install_prompt() {
+    local IFS=';'
+    [[ ";${PROMPT_COMMAND[*]-};" == *';__dotfiles_prompt;'* ]] && return
+    if [[ $(declare -p PROMPT_COMMAND 2>/dev/null) == 'declare -a '* ]]; then
+        PROMPT_COMMAND=(__dotfiles_prompt "${PROMPT_COMMAND[@]}")
+    else
+        PROMPT_COMMAND="__dotfiles_prompt${PROMPT_COMMAND:+; $PROMPT_COMMAND}"
+    fi
+}
+export -n PROMPT_COMMAND
+__dotfiles_install_prompt
+unset -f __dotfiles_install_prompt
 
 #if [ -f ~/.dotfiles/shell/bashmarks/bashmarks.sh ]; then
 #    source ~/.dotfiles/shell/bashmarks/bashmarks.sh

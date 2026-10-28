@@ -35,7 +35,6 @@ in {
     ".config/herdr/config.toml".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/herdr/config.toml";
     ".config/home-manager".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}";
     ".config/nix/nix.conf".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/config/nix/nix.conf";
-    ".config/liquidpromptrc".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/liquidpromptrc";
     ".datomic/dev-local.edn".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/datomic/dev-local.edn";
     ".lein/profiles.clj".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/lein/profiles.clj";
     ".tmux".source = config.lib.file.mkOutOfStoreSymlink "${dotfiles}/tmux";

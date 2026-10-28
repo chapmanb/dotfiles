@@ -114,6 +114,26 @@ workflow but does not roll back earlier actions: inspect the preview, retain
 verified off-host backups and rerun preflight after any interruption. No Ubuntu
 release upgrade is performed.
 
+## Native Bash prompt
+
+Interactive Bash uses a small built-in prompt: `[:~/path] $`, with a green colon,
+bold path/mark and a purple nonzero exit status before the mark. SSH sessions
+include the hostname; root includes its username and uses `#`. Bash's `\w`
+provides HOME abbreviation without interpreting directory names as shell code.
+History is flushed before each prompt, and existing prompt hooks are retained.
+There are no VCS/system widgets or width-based path shortening.
+
+LiquidPrompt and its submodule/config are retired. The prompt leaves Bash's
+normal prompt expansion enabled so Ghostty's preexec hook can run. Open a **new
+tab/shell** to switch: sourcing the new bashrc into a shell that already loaded
+LiquidPrompt leaves its old functions, hooks and disabled expansion in memory.
+The checkout-linked bashrc applies immediately to new shells; a normal Home
+Manager activation outside pibox removes the obsolete managed config link.
+Retired files still bind-mounted by an old sandbox need host-side removal, not
+an attempt to unlink the read-only mount from inside pibox. To roll back, revert
+the native-prompt commit, then run `git submodule update --init shell/liquidprompt`,
+reactivate Home Manager and start a fresh shell.
+
 ## Ghostty application launcher on Ubuntu
 
 Home Manager overrides `com.mitchellh.ghostty.desktop` in the generic-Linux
