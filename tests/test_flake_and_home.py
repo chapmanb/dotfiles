@@ -12,14 +12,14 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 UNSTABLE_PACKAGES = {
-    "neovim", "uv", "pixi", "bun", "nodejs_24", "python315", "deno", "pnpm",
+    "neovim", "uv", "pixi", "bun", "python315", "deno", "pnpm",
     "ruff", "pyright", "rclone", "restic", "glab", "brave", "google-chrome",
 }
 EXISTING_HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
     "neovim", "ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
-    "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
+    "pkgs.unstable.nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
     "brave", "libreoffice", "inkscape", "redshift",
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
@@ -367,11 +367,14 @@ class TestFlakeAndHome(unittest.TestCase):
         overlay = re.search(r"inherit \(unstable\)([^;]+);", flake)
         self.assertIsNotNone(overlay)
         self.assertNotIn("zstd", overlay.group(1).split())
+        self.assertNotIn("nodejs_24", overlay.group(1).split())
         home_module = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home_module)
         self.assertIsNotNone(packages)
         self.assertIn("pkgs.unstable.zstd", packages.group(1).split())
         self.assertNotIn("zstd", packages.group(1).split())
+        self.assertIn("pkgs.unstable.nodejs_24", packages.group(1).split())
+        self.assertNotIn("nodejs_24", packages.group(1).split())
 
         with tempfile.TemporaryDirectory(prefix="test-shell-transition-") as temporary:
             home = Path(temporary)

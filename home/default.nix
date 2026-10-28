@@ -25,7 +25,7 @@ in {
     ripgrep fd bat fzf jq rclone restic pkgs.unstable.zstd git glab neovim ghostty tmux
     awscli2 snowflake-cli babashka clojure leiningen ruff pyright tree-sitter
     xclip wl-clipboard pass gnupg
-    nodejs_24 python315 uv pixi bun deno pnpm
+    pkgs.unstable.nodejs_24 python315 uv pixi bun deno pnpm
     brave libreoffice inkscape redshift
     gh go-task glow lazygit gitu mdbook pandoc clj-kondo clojure-lsp
     kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk pre-commit

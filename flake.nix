@@ -52,7 +52,7 @@
         in {
           inherit unstable;
           inherit (unstable)
-            neovim uv pixi bun nodejs_24 python315 deno pnpm ruff pyright
+            neovim uv pixi bun python315 deno pnpm ruff pyright
             rclone restic glab brave google-chrome;
           ghostty = unstable.ghostty.overrideAttrs (old: {
             patches = (old.patches or []) ++ [ ./patches/ghostty-child-environment.patch ];
