@@ -7,6 +7,7 @@ import fnmatch
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -31,7 +32,16 @@ MIGRATED_BINARIES = (
     "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
     "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",
     "ncdu", "parallel", "datamash", "tree", "fx",
+    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport", "mysqlpump",
+    "mysqlshow", "mysqlslap", "mysql_config_editor", "mysqldumpslow",
 )
+APPROVED_UBUNTU_DUPLICATES = frozenset((
+    "openjdk-11-jre", "openjdk-11-jre-headless", "mysql-client", "mysql-client-8.0",
+    "mysql-client-core-8.0", "datamash", "ffmpeg", "graphviz", "imagemagick",
+    "imagemagick-6.q16", "ncdu", "parallel", "qpdf", "sqlite3", "tree", "vim",
+    "vim-runtime", "docker-compose",
+))
+DUPLICATE_REPLACEMENT_BINARIES = (*MIGRATED_BINARIES, "nvim")
 RELOCATED_SCRIPTS = ("gws", "fix_docker_vpn.sh", "fix_docker_vpn_chris.sh")
 PRESERVED_LAUNCHERS = frozenset((
     "claude", "codex", "herdr", "pibox", "nori-auth", "skills-curl", "skills-curl.ps1",
@@ -287,6 +297,120 @@ def guard_apt(runner, arguments):
             raise GateError(f"Protected Host Package Guard refused removal of {fields[1]}")
 
 
+def guard_duplicate_purge(runner, candidates):
+    output = runner.run(["apt-get", "-s", "purge", *candidates]).stdout
+    removals = set()
+    for line in output.splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        if fields[0] in ("Inst", "Conf"):
+            raise GateError("Duplicate purge must not install, upgrade or configure packages")
+        if fields[0] not in ("Remv", "Purg"):
+            continue
+        if len(fields) < 2:
+            raise GateError("Malformed APT removal row")
+        name = fields[1]
+        if protected_package(name):
+            raise GateError(f"Protected Host Package Guard refused removal of {name}")
+        # APT may omit an installed native architecture suffix, but an explicit
+        # suffix must match the selected identifier exactly (never another arch).
+        matching = [candidate for candidate in candidates
+                    if candidate == name or (":" not in name
+                                             and candidate.split(":", 1)[0] == name)]
+        if len(matching) != 1:
+            raise GateError(f"Duplicate purge refused unselected removal of {name}")
+        removals.add(matching[0])
+    missing = set(candidates) - removals
+    if missing:
+        raise GateError("Duplicate purge simulation omitted selected packages: "
+                        + ", ".join(sorted(missing)))
+    return frozenset(removals), output
+
+
+def require_duplicate_replacements(args, built_profile):
+    active = args.home / ".nix-profile"
+    store = (args.system_root / "nix/store").resolve()
+    if not active.resolve().is_relative_to(store):
+        raise GateError("Active Nix profile does not resolve into the Nix store")
+    for label, profile in (("built", Path(built_profile)), ("active", active)):
+        missing = [name for name in DUPLICATE_REPLACEMENT_BINARIES
+                   if not (profile / "bin" / name).is_file()
+                   or not os.access(profile / "bin" / name, os.X_OK)
+                   or (label == "active"
+                       and not (profile / "bin" / name).resolve().is_relative_to(store))]
+        if missing:
+            raise GateError(f"Missing {label} Nix replacements: " + ", ".join(missing))
+
+
+def require_java17_version(runner, binary):
+    result = runner.run([str(binary), "-version"])
+    if not re.search(r'\b(?:openjdk|java) version "17[."]',
+                     result.stdout + result.stderr):
+        raise GateError(f"Retained Java runtime does not report major 17: {binary}")
+
+
+def require_native_duplicate_fallbacks(args, runner, installed):
+    names = {name.split(":", 1)[0] for name in installed}
+    required = {"openjdk-17-jre", "openjdk-17-jre-headless", "vim-tiny"}
+    if required - names:
+        raise GateError("Missing retained native packages: " + ", ".join(sorted(required - names)))
+    headless = next(name for name in installed if name.split(":", 1)[0] == "openjdk-17-jre-headless")
+    files = runner.run(["dpkg-query", "-L", headless]).stdout.splitlines()
+    java_paths = [args.system_root / name.lstrip("/") for name in files
+                  if name.startswith("/usr/lib/jvm/") and name.endswith("/bin/java")]
+    if len(java_paths) != 1 or not java_paths[0].is_file() or not os.access(java_paths[0], os.X_OK):
+        raise GateError("Missing retained native Java17 executable")
+    java = java_paths[0].resolve()
+    require_java17_version(runner, java)
+    editor = args.system_root / "usr/bin/vim.tiny"
+    docker = args.system_root / "usr/bin/docker"
+    for binary in (editor, docker):
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise GateError(f"Missing native fallback: {binary}")
+    runner.run([str(editor), "--version"])
+    compose = runner.run([str(docker), "compose", "version"]).stdout
+    if not re.search(r"Docker Compose version v?2\.", compose):
+        raise GateError("Native Docker Compose v2 is unavailable")
+    return java
+
+
+def verify_default_java17(args, runner, retained_java):
+    try:
+        default = args.system_root / "usr/bin/java"
+        if default.resolve(strict=True) != retained_java:
+            raise GateError("/usr/bin/java does not resolve to retained Java17")
+        require_java17_version(runner, default)
+    except (GateError, OSError, subprocess.CalledProcessError) as error:
+        raise GateError("Purge completed but default Java17 postcheck FAILED; "
+                        "no repair or restart attempted. Inspect /usr/bin/java manually.") from error
+
+
+def prune_ubuntu_duplicates(args, runner, execute):
+    result = preflight_ubuntu(args, runner)
+    require_duplicate_replacements(args, result["home_manager_profile"])
+    installed, _ = installed_packages(runner)
+    retained_java = require_native_duplicate_fallbacks(args, runner, installed)
+    candidates = [name for name in installed
+                  if name.split(":", 1)[0] in APPROVED_UBUNTU_DUPLICATES]
+    commands = []
+    simulation = ""
+    if candidates:
+        removals, simulation = guard_duplicate_purge(runner, candidates)
+        commands = [["sudo", "apt-get", "--yes", "purge", *candidates]]
+        if execute:
+            current_removals, _ = guard_duplicate_purge(runner, candidates)
+            if current_removals != removals:
+                raise GateError("Duplicate purge removal graph changed before execution")
+            runner.run(commands[0])
+            verify_default_java17(args, runner, retained_java)
+    return {**result, "purge_packages": candidates, "commands": commands,
+            "apt_simulation": simulation,
+            "default_java17": "VERIFIED" if execute and candidates else "NOT_CHECKED",
+            "follow_up": "Orphan candidates require separate review; no automatic autoremove. "
+                         "Existing JVM processes are unchanged; no restart was performed."}
+
+
 def residual_purge_arguments(residual):
     candidates = [name for name in residual if not protected_package(name)]
     return ["purge", *candidates] if candidates else []
@@ -403,7 +527,8 @@ def main(argv=None, runner=None):
         common.add_argument(f"--{flag}", action="store_true")
     parser = argparse.ArgumentParser(description=__doc__, parents=[common])
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge", "simplify-ubuntu-host"):
+    for name in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge",
+                 "simplify-ubuntu-host", "prune-ubuntu-duplicates"):
         commands.add_parser(name, parents=[common])
     args = parser.parse_args(argv)
     args.home = getattr(args, "home", Path.home()).absolute()
@@ -421,6 +546,8 @@ def main(argv=None, runner=None):
             result = clean_user_space(args, runner, execute)
         elif args.command == "activate-host-bridge":
             result = activate_host_bridge(args, runner, execute)
+        elif args.command == "prune-ubuntu-duplicates":
+            result = prune_ubuntu_duplicates(args, runner, execute)
         else:
             result = simplify_ubuntu_host(args, runner, execute)
         print(json.dumps({"status": "EXECUTED" if execute else "DRY_RUN", **result}, indent=2))

@@ -14,7 +14,7 @@ UNSTABLE_PACKAGES = {
     "neovim", "uv", "pixi", "bun", "nodejs_24", "python315", "deno", "pnpm",
     "ruff", "pyright", "rclone", "restic", "glab", "brave", "google-chrome",
 }
-HOME_PACKAGES = {
+EXISTING_HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
     "neovim", "ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
@@ -25,6 +25,7 @@ HOME_PACKAGES = {
     "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
 }
+HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql80"}
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
     "config/nvim/init.lua": "11445b38ebc3983654b1b40aa5541fb1bef92114fbdc5750b247ab17e552c15c",
@@ -239,7 +240,7 @@ class TestFlakeAndHome(unittest.TestCase):
         home = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
-        self.assertEqual(len(HOME_PACKAGES), 64)
+        self.assertEqual(len(HOME_PACKAGES), 65)
         self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
         self.assertIn('".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;', home)
         for source in ("flake.nix", "home/default.nix", "lib/dotfiles_migrate/daily_backup.py"):
@@ -247,6 +248,44 @@ class TestFlakeAndHome(unittest.TestCase):
                 self.assertNotIn("wezterm", (ROOT / source).read_text().lower())
         self.assertFalse((ROOT / "config/wezterm").exists())
         self.assertFalse((ROOT / "config/wezterm/wezterm.lua").exists())
+
+    def test_mysql_clients_added_without_retiring_tools_or_adding_java(self):
+        home = (ROOT / "home/default.nix").read_text()
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        self.assertEqual(len(EXISTING_HOME_PACKAGES), 64)
+        self.assertCountEqual(packages.group(1).split(), EXISTING_HOME_PACKAGES | {"mysql80"})
+        self.assertEqual(
+            hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest(),
+            "2b313d53f5009fa27f64e8385f579f84b13e0173e185f87e331dab88fdba199f",
+        )
+
+    def test_mysql_slowlog_runtime_is_declared_and_scoped(self):
+        home = (ROOT / "home/default.nix").read_text()
+        # Check the declaration offline; built help and log parsing are separate gates.
+        composition = re.search(r"mysql80 = pkgs\.symlinkJoin \{(.*?)\n  \};", home, re.DOTALL)
+        self.assertIsNotNone(composition, "mysql80 must retain upstream with a scoped runtime repair")
+        body = composition.group(1)
+        self.assertIn('name = "mysql-${pkgs.mysql80.version}-slowlog-runtime";', body)
+        self.assertIn("paths = [ pkgs.mysql80 ];", body)
+        self.assertIn("nativeBuildInputs = [ pkgs.makeWrapper ];", body)
+        post_build = re.search(r"postBuild = ''(.*?)'';", body, re.DOTALL)
+        self.assertIsNotNone(post_build)
+        # Only this link is replaced. makeWrapper adds the original script before
+        # the forwarded argv and prefixes PATH only inside the helper process.
+        self.assertEqual(
+            " ".join(post_build.group(1).replace("\\\n", " ").split()),
+            'rm "$out/bin/mysqldumpslow" '
+            'makeWrapper ${pkgs.perl}/bin/perl "$out/bin/mysqldumpslow" '
+            '--add-flags "${pkgs.mysql80}/bin/mysqldumpslow" '
+            '--prefix PATH : "${pkgs.mysql80}/bin"',
+        )
+        self.assertNotIn("overrideAttrs", body)
+        self.assertNotIn("home.sessionVariables.PATH", home)
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        self.assertEqual(packages.group(1).split().count("mysql80"), 1)
+        self.assertNotIn("perl", packages.group(1).split())
 
     def test_bashrc_retires_legacy_managers_and_dormant_nixos_reference(self):
         shell = (ROOT / "bashrc").read_text()

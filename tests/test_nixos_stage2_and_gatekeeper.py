@@ -33,6 +33,10 @@ WORKSPACES = (
     ".pi", ".claude", ".codex", ".agents", ".gemini",
 )
 BROWSABLE = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
+MYSQL_CLIENT_BINARIES = (
+    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport", "mysqlpump",
+    "mysqlshow", "mysqlslap", "mysql_config_editor", "mysqldumpslow",
+)
 ASSETS = ("bin/vpnagentd", "bin/vpn", "bin/vpnui", "bin/acwebhelper",
           "vpn/profile/ginkgo-corp-profile.xml", "AnyConnectLocalPolicy.xml")
 
@@ -251,7 +255,7 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             "gcloud", "gh", "task", "glow", "lazygit", "gitu", "mdbook", "pandoc",
             "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
             "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",
-            "ncdu", "parallel", "datamash", "tree", "fx",
+            "ncdu", "parallel", "datamash", "tree", "fx", *MYSQL_CLIENT_BINARIES,
         })
         self.assertEqual(gatekeeper.CORPORATE_SERVICES, (
             "centrifydc", "cisco-amp", "vpnagentd", "ir_agent", "drivestrike",
@@ -308,6 +312,29 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         code, _, errors = self.invoke("preflight-ubuntu")
         self.assertEqual(code, 1)
         self.assertNotIn("private failure", errors)
+
+    def test_mysql_replacement_commands_required_by_preflight(self):
+        self.assertTrue(set(MYSQL_CLIENT_BINARIES).issubset(gatekeeper.MIGRATED_BINARIES))
+        code, output, errors = self.invoke("preflight-ubuntu")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["home_manager_profile"],
+                         str(self.activation / "home-path"))
+        for name in MYSQL_CLIENT_BINARIES:
+            binary = self.activation / "home-path/bin" / name
+            for unavailable in ("missing", "not-executable"):
+                with self.subTest(binary=name, unavailable=unavailable):
+                    if unavailable == "missing":
+                        binary.unlink()
+                    else:
+                        binary.chmod(0o644)
+                    self.runner.calls.clear()
+                    code, _, errors = self.invoke("preflight-ubuntu", "--execute", "--confirm")
+                    self.assertEqual(code, 1)
+                    self.assertIn(f"Missing migrated Nix binaries: {name}", errors)
+                    self.assert_no_host_mutations()
+                    self.make_file(binary)
+        self.assertEqual(self.invoke("preflight-ubuntu")[0], 0)
+        self.assert_no_host_mutations()
 
     def test_explicit_drivestrike_health_exception_preserves_other_gates(self):
         flag = "--allow-inactive-drivestrike"

@@ -2,6 +2,18 @@
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
+  # The upstream slow-log script has an unusable Perl shebang and needs my_print_defaults.
+  mysql80 = pkgs.symlinkJoin {
+    name = "mysql-${pkgs.mysql80.version}-slowlog-runtime";
+    paths = [ pkgs.mysql80 ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      rm "$out/bin/mysqldumpslow"
+      makeWrapper ${pkgs.perl}/bin/perl "$out/bin/mysqldumpslow" \
+        --add-flags "${pkgs.mysql80}/bin/mysqldumpslow" \
+        --prefix PATH : "${pkgs.mysql80}/bin"
+    '';
+  };
 in {
   home.username = "bchapman";
   home.homeDirectory = "/home/bchapman";
@@ -18,6 +30,7 @@ in {
     gh go-task glow lazygit gitu mdbook pandoc clj-kondo clojure-lsp
     kubectl kubernetes-helm k9s argo terraform terraform-docs google-cloud-sdk pre-commit
     ffmpeg graphviz imagemagick qpdf sqlite ncdu parallel datamash tree fx jetbrains-mono
+    mysql80
   ];
 
   fonts.fontconfig.enable = true;

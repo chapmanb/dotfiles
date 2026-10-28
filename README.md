@@ -40,7 +40,137 @@ Eastern user timer. Inspect it with
 `journalctl --user -u dotfiles-daily-backup.service`.
 Passwords, credentials and Cisco assets must stay outside this repository.
 
-## Backup-gated Ubuntu simplification
+## MySQL client provider
+
+Home Manager adds stable pinned `mysql80` (MySQL 8.0.42) without retiring any
+existing Nix utility or adding an explicit JDK. This is the full upstream package,
+including server programs such as `mysqld`; `mysql80.client` aliases the same
+derivation, not a client-only output. This is **not** a server-free store closure.
+No MySQL service or data directory is enabled, started or initialized by this
+addition. Existing Clojure/Leiningen and LibreOffice Application-Private JVMs
+remain unchanged; this does not reduce the entire closure to a single JVM.
+
+A local package composition retains every upstream program, replacing only the
+`mysqldumpslow` launcher: it invokes the original script with explicit Nix Perl
+instead of its broken upstream interpreter, forwards arguments unchanged, and
+prefixes PATH with the same upstream MySQL bin directory only for this helper
+(to resolve `my_print_defaults`). It does not rebuild MySQL, install global Perl
+or change the shell PATH.
+
+Preflight requires executable `mysql`, `mysqladmin`, `mysqlcheck`, `mysqldump`,
+`mysqlimport`, `mysqlpump`, `mysqlshow`, `mysqlslap`, `mysql_config_editor` and
+`mysqldumpslow` in the built `home-path`, alongside all prior replacements.
+Executable presence is not runtime proof: validate version/help launches and
+synthetic slow-log parsing separately, with empty HOME and absent login-file
+configuration. For `mysqlpump`, put `--no-defaults` first and supply an explicitly
+nonexistent temporary socket with `--version` to prevent connections. Do not use
+unsupported `--no-login-paths`. These offline checks do not validate database
+authentication, TLS or live-database compatibility. Never put credentials,
+private logs or database configuration in build inputs or evidence.
+
+The package supplies `myisam_ftdump`, but not Ubuntu's `mysqlreport` script or
+`mysqlanalyze`, `mysqloptimize` and `mysqlrepair` convenience symlinks. The latter
+three use `mysqlcheck` on Ubuntu; upstream `mysqlcheck` supports `--analyze`,
+`--optimize` and `--repair`. No aliases or caller rewrites are supplied here.
+Pause before host removal if any missing helper name is required; resolve usage
+with the operator rather than silently retiring capabilities.
+
+Building is not activation or removal readiness. After review, the operator must
+separately activate the package profile, verify active-profile replacements and
+review helper usage and host safeguards before any separately approved purge.
+Full Home Manager activation and service changes are not needed to test these
+clients. Do not rerun the historical `simplify-ubuntu-host` workflow for duplicate
+removal. No host purge or database initialization is part of this addition.
+
+## Guarded Ubuntu duplicate pruning
+
+Use the separate `prune-ubuntu-duplicates` command, **not** the historical
+`simplify-ubuntu-host` workflow. Building alone does not update the active profile.
+After reviewing the build and missing MySQL helper usage, the operator can install
+only the package profile as the normal user, without full Home Manager activation:
+
+```sh
+generation=$(nix build --no-link --print-out-paths \
+  'git+file:///home/bchapman/.dotfiles#homeConfigurations."bchapman@bchapman-ubnt".activationPackage')
+nix-env --profile "$HOME/.nix-profile" --install "$generation/home-path"
+```
+
+This changes user packages only; do not run `$generation/activate` or
+`home-manager switch` for this step. Verify all ten MySQL commands through
+`~/.nix-profile/bin` with the isolated version/help and synthetic-log checks above;
+Ubuntu `/usr/bin/mysql` is not proof of replacement readiness. Resolve any required
+`mysqlreport`, `mysqlanalyze`, `mysqloptimize` or `mysqlrepair` usage with the operator
+before removing their Ubuntu provider. No database connection is implicit.
+
+Obtain a fresh real backup verification (never edit a report to pass the gate),
+then preview and review every selected identifier and APT removal:
+
+```sh
+bin/daily-backup verify
+bin/migration-gatekeeper prune-ubuntu-duplicates
+# If verification used a different writable state directory:
+bin/migration-gatekeeper prune-ubuntu-duplicates --backup-report /path/to/verification.json
+# Only after separate operator approval, in an unsandboxed host terminal:
+bin/migration-gatekeeper prune-ubuntu-duplicates --execute --confirm
+```
+
+Never run the whole gatekeeper under sudo. Preview is the default; `--execute`
+requires `--confirm`, and `--dry-run` wins over both. Empty installed selection
+never invokes APT purge. Previews can evaluate/build Nix but do not mutate host
+packages, alternatives or services. The command reuses the <48-hour complete
+backup, Git-filtered build, Cisco assets/CA and corporate-service gates. An
+explicitly accepted `--allow-inactive-drivestrike` is a reported **health-only**
+exception, never permission to remove the agent or bypass other checks.
+
+The exact approved Ubuntu removal names are `openjdk-11-jre`,
+`openjdk-11-jre-headless`, `mysql-client`, `mysql-client-8.0`,
+`mysql-client-core-8.0`, `datamash`, `ffmpeg`, `graphviz`, `imagemagick`,
+`imagemagick-6.q16`, `ncdu`, `parallel`, `qpdf`, `sqlite3`, `tree`, `vim`,
+`vim-runtime`, and legacy `docker-compose`. Only installed members are selected;
+architecture-qualified package IDs are retained. All existing Nix tools remain,
+including ImageMagick, sqlite3, tree, ffmpeg, Graphviz, datamash, ncdu, parallel,
+qpdf and Neovim. Both built and active Nix replacements must be executable;
+native Java17 packages/runtime, `vim-tiny` recovery editing and Docker Compose v2
+must remain available.
+
+Caller investigation found that the `campaign-client`, `ice-floe-web` and
+`ice-jotunn` Makefile `%-ext` workflows invoke legacy `docker-compose`. The
+operator explicitly accepted retiring those workflows and removing the Ubuntu
+legacy provider: those targets will no longer work as written after removal.
+Docker and Compose v2 remain, but do not supply the legacy command on PATH.
+No project rewrite or compatibility shim is included. Inspect relevant tooling
+before proceeding; any newly discovered required legacy caller outside this
+accepted scope still needs an operator decision. A scoped source search cannot
+prove that all other project or binary launchers are independent of the name.
+
+The protected corporate/boot/desktop/system Python/graphics stack, Docker and
+Compose v2, kernels, GCC/G++/Fortran and **all other host compiler/build support**
+remain native. Ubuntu Java17 stays for ConnectWise; existing Clojure/Leiningen
+OpenJDK21 and LibreOffice private JRE17 stay unchanged. There is no new explicit
+Nix JDK and no claim of a single JVM on disk.
+
+Initial and immediately-before-purge APT simulations must contain no removal
+outside the selected installed set, including unselected approved names or
+foreign explicit architectures, and no installs/upgrades/configuration actions.
+For a nonempty selection, each simulation must cover every selected package;
+empty or partial removal output is a refusal, not proof of safety. A changed
+removal graph also stops execution. Execution issues only the explicit
+selected `sudo apt-get --yes purge ...`: no autoremove, residual-config sweep,
+APT update, upgrade/downgrade, source/mark change, filesystem cleanup, activation,
+alternatives command or service restart. The preview's `apt_simulation` preserves
+APT's orphan-candidate report separately from `purge_packages`; those candidates
+require another approval and are never automatically removed here.
+
+After an actual purge, the gatekeeper requires `/usr/bin/java` to resolve to the
+retained native Java17 and report major 17. A failure is reported **after** the
+purge, without hidden repair or rollback; stop and inspect manually. Also audit
+package status, active replacements, native editor/Compose v2 and corporate
+service health separately. Existing Java11 processes may still run: changing the
+default command does not switch their JVM. Any restart/reboot or alternatives
+repair needs separate approval. Unit tests and a clean simulation do not authorize
+host execution or prove application behavior.
+
+## Backup-gated Ubuntu simplification (historical workflow)
 
 Run `bin/daily-backup verify` first. The gatekeeper requires a report less than
 48 hours old covering both Snapshot Backup and every Browsable Sync root.
