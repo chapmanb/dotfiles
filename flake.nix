@@ -49,6 +49,9 @@
           inherit (unstable)
             neovim uv pixi bun nodejs_24 python315 deno pnpm ruff pyright
             rclone restic glab brave google-chrome;
+          ghostty = unstable.ghostty.overrideAttrs (old: {
+            patches = (old.patches or []) ++ [ ./patches/ghostty-child-environment.patch ];
+          });
           snowflake-cli = (unstable.snowflake-cli.override {
             python3Packages = snowflakePyPkgs;
           }).overridePythonAttrs (old: rec {

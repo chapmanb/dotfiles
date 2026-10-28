@@ -1,7 +1,7 @@
 { lib, pkgs, ... }:
 
 let
-  ghostty = "${pkgs.unstable.ghostty}/bin/ghostty";
+  ghostty = "${pkgs.ghostty}/bin/ghostty";
 in {
   home.packages = [ pkgs.xdg-terminal-exec ];
   home.sessionVariables.TERMINAL = ghostty;

@@ -16,7 +16,7 @@ UNSTABLE_PACKAGES = {
 }
 HOME_PACKAGES = {
     "ripgrep", "fd", "bat", "fzf", "jq", "rclone", "restic", "pkgs.unstable.zstd", "git", "glab",
-    "neovim", "pkgs.unstable.ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
+    "neovim", "ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
     "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
     "brave", "libreoffice", "inkscape", "redshift",
@@ -82,7 +82,7 @@ class TestFlakeAndHome(unittest.TestCase):
         flake = (ROOT / "flake.nix").read_text()
         desktop = (ROOT / "home/ghostty.nix").read_text()
         standalone, nixos = flake.split("nixosConfigurations.bchapman-ubnt =", 1)
-        self.assertIn("pkgs.unstable.ghostty", home)
+        self.assertIn("ghostty", home)
         self.assertIn("./home/ghostty.nix", standalone)
         self.assertIn("targets.genericLinux.enable = true;", standalone)
         self.assertIn("xdg.mime.enable = false;", standalone)
@@ -100,7 +100,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIsNotNone(packages)
         self.assertIn("brave", packages.group(1).split())
         self.assertNotIn("excludePackages", (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
-        self.assertIn('ghostty = "${pkgs.unstable.ghostty}/bin/ghostty";', desktop)
+        self.assertIn('ghostty = "${pkgs.ghostty}/bin/ghostty";', desktop)
         self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
         self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
         self.assertIn("exec = ghostty;", desktop)

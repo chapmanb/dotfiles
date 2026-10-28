@@ -114,6 +114,48 @@ workflow but does not roll back earlier actions: inspect the preview, retain
 verified off-host backups and rerun preflight after any interruption. No Ubuntu
 release upgrade is performed.
 
+## Ghostty child runtime isolation
+
+The overlay's `pkgs.ghostty` uses the pinned unstable Ghostty with
+`patches/ghostty-child-environment.patch`. Both the package profile and desktop
+commands use this patched package. The GTK terminal-child environment drops
+`GI_TYPELIB_PATH`, `GIO_EXTRA_MODULES`, `GDK_PIXBUF_MODULE_FILE` and
+`GST_PLUGIN_SYSTEM_PATH_1_0`, which otherwise make native Ubuntu tools load
+incompatible Nix libraries. Ghostty's own wrapper/runtime is unchanged; wrapped
+Nix applications supply their own runtime. Shell configuration, CA trust,
+shortcut dispatch and package pins are unchanged. Ghostty's normal PATH handling
+is retained. This patch does not sanitize its own URL-opening subprocesses.
+
+After building, activate as the normal user from **GNOME Terminal outside pibox**:
+
+```sh
+home-manager switch --flake 'git+file:///home/bchapman/.dotfiles#bchapman@bchapman-ubnt'
+```
+
+Keep GNOME Terminal open, fully quit and restart Ghostty, then relaunch herdr/pibox.
+A new window of an already-running Ghostty process can still use the old binary;
+existing shells and agent processes retain the old environment. In the restarted
+Ghostty, `/usr/bin/gnome-terminal --version` and
+`/usr/bin/gsettings get org.gnome.desktop.interface clock-format` should work
+without Nix GLIBC or module-load errors. Confirm LibreOffice/Inkscape still open.
+
+The opt-in runtime probe must fail against unpatched Ghostty and pass against the
+patched binary. Run it without host activation using the package store path:
+
+```sh
+mkdir -p tmp
+ghostty_package=$(nix build --no-link --print-out-paths \
+  'git+file:///home/bchapman/.dotfiles#homeConfigurations."bchapman@bchapman-ubnt".pkgs.ghostty')
+nix shell --inputs-from 'git+file:///home/bchapman/.dotfiles' nixpkgs#xvfb-run -c \
+  xvfb-run -d -f "$PWD/tmp/ghostty-xauthority" \
+  env GDK_BACKEND=x11 LIBGL_ALWAYS_SOFTWARE=1 \
+  python3 tests/ghostty_child_probe.py "$ghostty_package/bin/ghostty" \
+  --report tmp/ghostty-child.json
+```
+
+Retain the patch until the same runtime probe passes without it on a future
+upstream/package update; upgrading alone is not evidence of a fix.
+
 ## Cache cleanup and offline checks
 
 `bin/cold-archive prune-caches` previews removal of `.dotfiles/tmp` and agent-plan
