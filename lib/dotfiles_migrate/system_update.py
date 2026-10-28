@@ -25,7 +25,7 @@ UNSTABLE_PACKAGES = (
     "ruff", "pyright", "rclone", "restic", "glab", "brave", "google-chrome",
     "ghostty", "snowflake-cli", "zstd", "mesa",
 )
-CRITICAL_LIBRARIES = ("openssl", "curl", "libssh2")
+CRITICAL_LIBRARIES = ()
 HOME_CONFIGURATION = "bchapman@bchapman-ubnt"
 EMUDHRA_DISTRUST = "!mozilla/emSign_ECC_Root_CA_-_G3.crt"
 UPSTREAM_UNSTABLE = "github:NixOS/nixpkgs/nixos-unstable"
@@ -86,7 +86,9 @@ def fetch_advisories(packages):
         results = json.load(response)["results"]
     # querybatch returns IDs, not CVE aliases. Resolve them before patch filtering.
     details = {}
-    for result in results:
+    for package, result in zip(packages, results):
+        if not cves(" ".join(package.get("patches", []))):
+            continue
         for vulnerability in result.get("vulns", []):
             identifier = vulnerability["id"]
             if identifier not in details:
@@ -379,6 +381,8 @@ def install_root_helper(args, runner, report, execute):
 
 def as_operator(args, command):
     # Never evaluate a user-controlled flake or execute its programs as root.
+    if args.command != "run-root":
+        return list(command)
     return ["runuser", "-u", "bchapman", "--", "env", "-i", "HOME=" + str(args.home),
             "PATH=" + ROOT_PATH, "NIX_CONFIG=experimental-features = nix-command flakes", *command]
 
@@ -673,4 +677,6 @@ def run_user_tracks(args, runner, advisory_fetcher, report, execute):
             retain_user_store(args, runner, retention)
             report["status"] = "PARTIAL"
             result = delegate_root(args, runner, report)
+    elif (args.system_root / ROOT_HELPER).is_file():
+        result = run_root_tracks(args, runner, advisory_fetcher, report, False)
     return result

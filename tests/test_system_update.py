@@ -134,6 +134,8 @@ class OfflineRunner:
             if "--json" in args:
                 packages = self.upstream if system_update.UPSTREAM_UNSTABLE in args[-1] else self.locked
                 output = json.dumps(packages)
+            elif "daemonProfile.name" in args[-1]:
+                output = "nix-daemon-profile-" + self.candidate_daemon
             else:
                 output = str(self.source)
                 if self.reject_source:
@@ -578,6 +580,13 @@ class TestSystemUpdate(unittest.TestCase):
                         self.runner.calls.index(delegation))
         self.assertTrue(report["tracks"]["ubuntu_apt"]["reboot_required"])
         self.assertEqual(report["tracks"]["store_retention"]["system_gc"], "COMPLETED")
+        self.runner.calls.clear()
+        code, report = self.invoke(command="check")
+        self.assertEqual(code, 0)
+        self.assertEqual(report["tracks"]["nix_daemon"]["status"], "UP_TO_DATE")
+        self.assertEqual(report["tracks"]["ubuntu_apt"]["status"], "DRY_RUN")
+        self.assertEqual(report["tracks"]["ubuntu_apt"]["upgraded_packages"], ["curl"])
+        self.assertEqual(report["tracks"]["store_retention"]["system_gc"], "DRY_RUN")
         self.runner.calls.clear()
         self.invoke("--execute", "--confirm")
         self.assertIn(["sudo", "/usr/local/sbin/dotfiles-system-update"], self.runner.calls)
