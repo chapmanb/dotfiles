@@ -2,10 +2,10 @@
   description = "Brad's unified Home Manager and NixOS dotfiles";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
     home-manager = {
-      url = "github:nix-community/home-manager/release-24.11";
+      url = "github:nix-community/home-manager/release-26.05";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
@@ -21,8 +21,13 @@
           };
           snowflakePyPkgs = unstable.python314Packages.overrideScope (pyFinal: pyPrev: {
             click = pyPrev.click.overridePythonAttrs (old: {
-              version = prev.python312Packages.click.version;
-              src = prev.python312Packages.click.src;
+              version = "8.1.7";
+              src = unstable.fetchFromGitHub {
+                owner = "pallets";
+                repo = "click";
+                tag = "8.1.7";
+                hash = "sha256-8YqIKRyw5MegnRwAO7YTCZateEFQFTH2PHpE8gTPTow=";
+              };
               build-system = [ pyFinal.setuptools ];
               doCheck = false;
             });
@@ -77,6 +82,16 @@
       };
     in {
       overlays.default = unstableOverlay;
+
+      packages.${system}.daemonProfile = pkgs.symlinkJoin {
+        name = "nix-daemon-profile-${pkgs.unstable.nixVersions.latest.version}";
+        paths = [
+          pkgs.unstable.nixVersions.latest
+          pkgs.unstable.nixVersions.latest.man
+          pkgs.unstable.cacert
+        ];
+        passthru.nixVersion = pkgs.unstable.nixVersions.latest.version;
+      };
 
       homeConfigurations."bchapman@bchapman-ubnt" = home-manager.lib.homeManagerConfiguration {
         inherit pkgs;

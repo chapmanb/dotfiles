@@ -1,6 +1,7 @@
 """Offline structural checks; Nix builds remain a separate host preflight gate."""
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -21,11 +22,11 @@ EXISTING_HOME_PACKAGES = {
     "nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
     "brave", "libreoffice", "inkscape", "redshift",
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "clj-kondo", "clojure-lsp",
-    "kubectl", "kubernetes-helm", "k9s", "argo", "terraform", "terraform-docs", "google-cloud-sdk",
+    "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
     "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
 }
-HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql80"}
+HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql84"}
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
     "config/nvim/init.lua": "11445b38ebc3983654b1b40aa5541fb1bef92114fbdc5750b247ab17e552c15c",
@@ -47,9 +48,9 @@ class TestFlakeAndHome(unittest.TestCase):
     def test_flake_inputs_overlay_and_outputs(self):
         flake = (ROOT / "flake.nix").read_text()
         for declaration in (
-            'nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";',
+            'nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";',
             'nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";',
-            'url = "github:nix-community/home-manager/release-24.11";',
+            'url = "github:nix-community/home-manager/release-26.05";',
             'inputs.nixpkgs.follows = "nixpkgs";',
             'system = "x86_64-linux";',
             'unstable = import nixpkgs-unstable',
@@ -77,6 +78,63 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("home-manager.useUserPackages = true;", flake)
         self.assertIn("home-manager.users.bchapman.imports = [ ./home ./home/ghostty.nix ];", flake)
         self.assertEqual(flake.count("config.allowUnfree = true;"), 3)
+
+    def test_flake_26_05_and_daemon_profile_declaration(self):
+        flake = (ROOT / "flake.nix").read_text()
+        nodes = json.loads((ROOT / "flake.lock").read_text())["nodes"]
+        stable_inputs = (
+            ("nixpkgs", "NixOS", "nixpkgs", "nixos-26.05",
+             "718f670e845328e9c2cecdd832835712b2cbd065",
+             "sha256-Ee5BWo8sh3pGt70QUdRajnaginqFmWvrtdBc4gJzhks=", 1793015021),
+            ("home-manager", "nix-community", "home-manager", "release-26.05",
+             "24f2190587513b9c2f73db112a17844ae912d965",
+             "sha256-199i7ubVSXTMl+0AAlL7cVCXSjcI+jWByMcimYjeMX0=", 1792818383),
+        )
+        for name, owner, repo, ref, rev, nar_hash, modified in stable_inputs:
+            with self.subTest(input=name):
+                self.assertIn(f'url = "github:{owner}/{repo}/{ref}";', flake)
+                self.assertEqual(nodes[name]["original"], {
+                    "owner": owner, "repo": repo, "ref": ref, "type": "github",
+                })
+                self.assertEqual(nodes[name]["locked"], {
+                    "owner": owner, "repo": repo, "rev": rev, "type": "github",
+                    "narHash": nar_hash, "lastModified": modified,
+                })
+        self.assertEqual(nodes["home-manager"]["inputs"]["nixpkgs"], ["nixpkgs"])
+        self.assertIn('home.stateVersion = "24.11";', (ROOT / "home/default.nix").read_text())
+        self.assertIn('system.stateVersion = "24.11";',
+                      (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
+
+        click = re.search(
+            r"click = pyPrev\.click\.overridePythonAttrs \(old: \{(.*?)\n            \}\);",
+            flake, re.DOTALL,
+        )
+        self.assertIsNotNone(click)
+        self.assertIn('version = "8.1.7";', click.group(1))
+        source = re.search(r"src = unstable\.fetchFromGitHub \{(.*?)\};",
+                           click.group(1), re.DOTALL)
+        self.assertIsNotNone(source)
+        self.assertEqual(" ".join(source.group(1).split()),
+                         'owner = "pallets"; repo = "click"; tag = "8.1.7"; '
+                         'hash = "sha256-8YqIKRyw5MegnRwAO7YTCZateEFQFTH2PHpE8gTPTow=";')
+        self.assertNotIn("prev.python312Packages.click", flake)
+
+        self.assertIn('system = "x86_64-linux";', flake)
+        daemon = re.search(
+            r"packages\.\$\{system\}\.daemonProfile = pkgs\.symlinkJoin \{(.*?)\n      \};",
+            flake, re.DOTALL,
+        )
+        self.assertIsNotNone(daemon)
+        body = daemon.group(1)
+        self.assertIn('name = "nix-daemon-profile-${pkgs.unstable.nixVersions.latest.version}";', body)
+        paths = re.search(r"paths = \[(.*?)\];", body, re.DOTALL)
+        self.assertIsNotNone(paths)
+        self.assertEqual(paths.group(1).split(), [
+            "pkgs.unstable.nixVersions.latest",
+            "pkgs.unstable.nixVersions.latest.man",
+            "pkgs.unstable.cacert",
+        ])
+        self.assertIn("passthru.nixVersion = pkgs.unstable.nixVersions.latest.version;", body)
 
     def test_ubuntu_ghostty_and_brave_desktop_integration(self):
         home = (ROOT / "home/default.nix").read_text()
@@ -254,20 +312,20 @@ class TestFlakeAndHome(unittest.TestCase):
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
         self.assertEqual(len(EXISTING_HOME_PACKAGES), 64)
-        self.assertCountEqual(packages.group(1).split(), EXISTING_HOME_PACKAGES | {"mysql80"})
+        self.assertCountEqual(packages.group(1).split(), EXISTING_HOME_PACKAGES | {"mysql84"})
         self.assertEqual(
             hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest(),
-            "2b313d53f5009fa27f64e8385f579f84b13e0173e185f87e331dab88fdba199f",
+            "a5ab1b92bdef4ae1a0686109c5fbcf42cf442815918c2234a9373d6210896106",
         )
 
-    def test_mysql_slowlog_runtime_is_declared_and_scoped(self):
+    def test_mysql84_slowlog_runtime_is_declared_and_scoped(self):
         home = (ROOT / "home/default.nix").read_text()
         # Check the declaration offline; built help and log parsing are separate gates.
-        composition = re.search(r"mysql80 = pkgs\.symlinkJoin \{(.*?)\n  \};", home, re.DOTALL)
-        self.assertIsNotNone(composition, "mysql80 must retain upstream with a scoped runtime repair")
+        composition = re.search(r"mysql84 = pkgs\.symlinkJoin \{(.*?)\n  \};", home, re.DOTALL)
+        self.assertIsNotNone(composition, "mysql84 must retain upstream with a scoped runtime repair")
         body = composition.group(1)
-        self.assertIn('name = "mysql-${pkgs.mysql80.version}-slowlog-runtime";', body)
-        self.assertIn("paths = [ pkgs.mysql80 ];", body)
+        self.assertIn('name = "mysql-${pkgs.mysql84.version}-slowlog-runtime";', body)
+        self.assertIn("paths = [ pkgs.mysql84 ];", body)
         self.assertIn("nativeBuildInputs = [ pkgs.makeWrapper ];", body)
         post_build = re.search(r"postBuild = ''(.*?)'';", body, re.DOTALL)
         self.assertIsNotNone(post_build)
@@ -277,14 +335,15 @@ class TestFlakeAndHome(unittest.TestCase):
             " ".join(post_build.group(1).replace("\\\n", " ").split()),
             'rm "$out/bin/mysqldumpslow" '
             'makeWrapper ${pkgs.perl}/bin/perl "$out/bin/mysqldumpslow" '
-            '--add-flags "${pkgs.mysql80}/bin/mysqldumpslow" '
-            '--prefix PATH : "${pkgs.mysql80}/bin"',
+            '--add-flags "${pkgs.mysql84}/bin/mysqldumpslow" '
+            '--prefix PATH : "${pkgs.mysql84}/bin"',
         )
         self.assertNotIn("overrideAttrs", body)
         self.assertNotIn("home.sessionVariables.PATH", home)
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
-        self.assertEqual(packages.group(1).split().count("mysql80"), 1)
+        self.assertEqual(packages.group(1).split().count("mysql84"), 1)
+        self.assertNotIn("mysql80", home)
         self.assertNotIn("perl", packages.group(1).split())
 
     def test_bashrc_retires_legacy_managers_and_dormant_nixos_reference(self):
@@ -371,7 +430,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertTrue((ROOT / ".gitmodules").is_file())
         self.assertTrue((ROOT / "dotbot").is_dir())
 
-    def test_nightly_maintenance_continues_to_shutdown_when_repo_sync_fails(self):
+    def test_nightly_maintenance_verifies_backup_and_runs_system_update(self):
         script = ROOT / "bin/nightly-maintenance"
         subprocess.run(["bash", "-n", str(script)], check=True)
         with tempfile.TemporaryDirectory(prefix="test-nightly-maintenance-") as temporary:
@@ -382,6 +441,14 @@ class TestFlakeAndHome(unittest.TestCase):
             bindir = root / "bin"
             bindir.mkdir()
             log = root / "calls.log"
+            dotfiles_bin = home / ".dotfiles/bin"
+            dotfiles_bin.mkdir(parents=True)
+            for name in ("daily-backup", "system-update"):
+                stub = dotfiles_bin / name
+                stub.write_text('#!/usr/bin/env bash\n'
+                                f'echo "{name} $*" >> "$CALL_LOG"\n'
+                                'if [ "${FAIL_MAINTENANCE:-0}" = "1" ]; then exit 1; fi\n')
+                stub.chmod(0o755)
 
             for name, body in (
                 ("uv", 'echo "uv $*" >> "$CALL_LOG"\n'
@@ -405,14 +472,18 @@ class TestFlakeAndHome(unittest.TestCase):
             # Off-VPN failure in acs-mirror check skips update/sync, still attempts git pull and powers off at 22:00.
             result = subprocess.run(
                 [str(script)],
-                env={**base_env, "FAIL_UV": "1", "FAIL_GIT": "1", "FAKE_HOUR": "22"},
+                env={**base_env, "FAIL_UV": "1", "FAIL_GIT": "1", "FAIL_MAINTENANCE": "1", "FAKE_HOUR": "22"},
                 check=True, text=True, capture_output=True,
             )
+            self.assertIn("backup verification failed", result.stderr)
+            self.assertIn("system update failed", result.stderr)
             self.assertIn("acs-mirror sync failed", result.stderr)
             self.assertIn("acs-scheduler pull failed", result.stderr)
             self.assertEqual(
                 log.read_text().splitlines(),
                 [
+                    "daily-backup verify",
+                    "system-update run --execute --confirm --nightly --allow-inactive-drivestrike",
                     "uv run acs-mirror check",
                     "git pull origin master",
                     "systemctl poweroff -i",
@@ -429,6 +500,8 @@ class TestFlakeAndHome(unittest.TestCase):
             self.assertEqual(
                 log.read_text().splitlines(),
                 [
+                    "daily-backup verify",
+                    "system-update run --execute --confirm --nightly --allow-inactive-drivestrike",
                     "uv run acs-mirror check",
                     "uv run acs-mirror update",
                     "uv run acs-mirror sync",

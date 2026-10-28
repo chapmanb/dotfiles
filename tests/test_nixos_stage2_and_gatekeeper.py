@@ -34,7 +34,7 @@ WORKSPACES = (
 )
 BROWSABLE = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
 MYSQL_CLIENT_BINARIES = (
-    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport", "mysqlpump",
+    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport",
     "mysqlshow", "mysqlslap", "mysql_config_editor", "mysqldumpslow",
 )
 ASSETS = ("bin/vpnagentd", "bin/vpn", "bin/vpnui", "bin/acwebhelper",
@@ -314,6 +314,8 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         self.assertNotIn("private failure", errors)
 
     def test_mysql_replacement_commands_required_by_preflight(self):
+        self.assertEqual(len(MYSQL_CLIENT_BINARIES), 9)
+        self.assertNotIn("mysqlpump", gatekeeper.MIGRATED_BINARIES)
         self.assertTrue(set(MYSQL_CLIENT_BINARIES).issubset(gatekeeper.MIGRATED_BINARIES))
         code, output, errors = self.invoke("preflight-ubuntu")
         self.assertEqual(code, 0, errors)

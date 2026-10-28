@@ -40,11 +40,60 @@ Eastern user timer. Inspect it with
 `journalctl --user -u dotfiles-daily-backup.service`.
 Passwords, credentials and Cisco assets must stay outside this repository.
 
+## Guarded system updates
+
+The stable inputs track `nixos-26.05` and Home Manager `release-26.05`;
+state versions remain `24.11`. The migration uses `mysql84` and
+`argo-workflows`, and pins Snowflake CLI's Click dependency to 8.1.7.
+
+```sh
+bin/system-update check
+bin/system-update run                    # preview only
+bin/system-update install-root-helper   # preview one-time privileged setup
+bin/system-update install-root-helper --execute --confirm
+bin/system-update run --execute --confirm
+# Explicitly advance unstable even without actionable advisories:
+bin/system-update run --execute --confirm --include-unstable
+```
+
+Mutations require both flags; `--dry-run` always wins. A fresh (<48 hours),
+complete verified backup and healthy Corporate Endpoint Stack are required.
+Stable inputs advance nightly; unstable advances only for actionable advisories
+(or `--include-unstable`). Dirty/non-master checkouts skip lockfile changes.
+Validated changes activate with Home Manager and commit the lockfile locally,
+never push. Future stable branch migrations are reported, not automatic.
+
+The one-time setup prompts for sudo and installs a standalone root-owned code
+snapshot at `/usr/local/sbin/dotfiles-system-update` (`0755`), not an import from
+this checkout. Its `0440` single-command sudoers rule is validated with
+`visudo -cf`. Reinstall after reviewing helper code changes. The helper accepts
+no arguments and runs fixed root tracks with a sanitized environment, evaluates
+and builds the flake candidate as `bchapman`. Before installation it independently
+reconstructs the bundle from official, revision-pinned `NixOS/nixpkgs` inputs and
+requires an identical store path: a root-owned Nix store path alone is not proof
+that user-defined code is safe to run as root. It also rechecks backup freshness
+and ownership invariants. Root reports stay under `/var/lib/system-update/`.
+
+The daemon profile changes only for a newer candidate or an advisory-affected
+running version with a different candidate; restart failure restores the prior
+profile. APT uses `upgrade --with-new-pkgs`, refuses every simulated removal or
+purge (including protected host packages), preserves config-file defaults,
+rechecks corporate health, and reports reboot requirements. Ubuntu's fallback
+APT timers remain enabled. User and system profiles/store retain 14 days;
+system GC is skipped after daemon failure to preserve rollback evidence.
+
+Nightly maintenance verifies the backup, runs updates and user GC, then invokes
+`sudo -n /usr/local/sbin/dotfiles-system-update` for daemon/APT/system GC. Missing
+helper or unavailable sudo is deferred, not fatal. Verification/update failures
+warn on stderr but do not prevent repository syncs or nightly shutdown. Inspect
+the private `~/.local/state/system-update/report.json` for per-track outcomes;
+`--allow-inactive-drivestrike` is only a reported service-health exception.
+
 ## MySQL client provider
 
-Home Manager adds stable pinned `mysql80` (MySQL 8.0.42) without retiring any
+Home Manager adds stable pinned `mysql84` (MySQL 8.4 LTS) without retiring any
 existing Nix utility or adding an explicit JDK. This is the full upstream package,
-including server programs such as `mysqld`; `mysql80.client` aliases the same
+including server programs such as `mysqld`; `mysql84.client` aliases the same
 derivation, not a client-only output. This is **not** a server-free store closure.
 No MySQL service or data directory is enabled, started or initialized by this
 addition. Existing Clojure/Leiningen and LibreOffice Application-Private JVMs
@@ -58,14 +107,13 @@ prefixes PATH with the same upstream MySQL bin directory only for this helper
 or change the shell PATH.
 
 Preflight requires executable `mysql`, `mysqladmin`, `mysqlcheck`, `mysqldump`,
-`mysqlimport`, `mysqlpump`, `mysqlshow`, `mysqlslap`, `mysql_config_editor` and
+`mysqlimport`, `mysqlshow`, `mysqlslap`, `mysql_config_editor` and
 `mysqldumpslow` in the built `home-path`, alongside all prior replacements.
 Executable presence is not runtime proof: validate version/help launches and
 synthetic slow-log parsing separately, with empty HOME and absent login-file
-configuration. For `mysqlpump`, put `--no-defaults` first and supply an explicitly
-nonexistent temporary socket with `--version` to prevent connections. Do not use
-unsupported `--no-login-paths`. These offline checks do not validate database
-authentication, TLS or live-database compatibility. Never put credentials,
+configuration. MySQL 8.4 removed `mysqlpump`; it is no longer a preflight
+requirement. Do not use unsupported `--no-login-paths`. These offline checks do
+not validate database authentication, TLS or live-database compatibility. Never put credentials,
 private logs or database configuration in build inputs or evidence.
 
 The package supplies `myisam_ftdump`, but not Ubuntu's `mysqlreport` script or
@@ -96,7 +144,7 @@ nix-env --profile "$HOME/.nix-profile" --install "$generation/home-path"
 ```
 
 This changes user packages only; do not run `$generation/activate` or
-`home-manager switch` for this step. Verify all ten MySQL commands through
+`home-manager switch` for this step. Verify all nine MySQL commands through
 `~/.nix-profile/bin` with the isolated version/help and synthetic-log checks above;
 Ubuntu `/usr/bin/mysql` is not proof of replacement readiness. Resolve any required
 `mysqlreport`, `mysqlanalyze`, `mysqloptimize` or `mysqlrepair` usage with the operator

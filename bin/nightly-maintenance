@@ -23,15 +23,25 @@ shutdown_if_nightly_window() {
     fi
 }
 
-# Step 2: Check, update, and sync acs-mirror (best-effort when off VPN)
+dotfiles_bin="$HOME/.dotfiles/bin"
+
+if ! "$dotfiles_bin/daily-backup" verify; then
+    echo "nightly-maintenance: backup verification failed; continuing to remaining steps" >&2
+fi
+
+if ! "$dotfiles_bin/system-update" run --execute --confirm --nightly --allow-inactive-drivestrike; then
+    echo "nightly-maintenance: system update failed; continuing to remaining steps" >&2
+fi
+
+# Check, update, and sync acs-mirror (best-effort when off VPN)
 if ! sync_acs_mirror; then
     echo "nightly-maintenance: acs-mirror sync failed; continuing to remaining steps" >&2
 fi
 
-# Step 3: Pull latest master in acs-scheduler (best-effort when off VPN)
+# Pull latest master in acs-scheduler (best-effort when off VPN)
 if ! pull_acs_scheduler; then
     echo "nightly-maintenance: acs-scheduler pull failed; continuing to shutdown" >&2
 fi
 
-# Step 4: Shut down the system during the nightly window (21:00-04:00 America/New_York)
+# Shut down the system during the nightly window (21:00-04:00 America/New_York)
 shutdown_if_nightly_window

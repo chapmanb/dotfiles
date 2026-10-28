@@ -32,7 +32,7 @@ MIGRATED_BINARIES = (
     "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
     "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",
     "ncdu", "parallel", "datamash", "tree", "fx",
-    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport", "mysqlpump",
+    "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport",
     "mysqlshow", "mysqlslap", "mysql_config_editor", "mysqldumpslow",
 )
 APPROVED_UBUNTU_DUPLICATES = frozenset((
