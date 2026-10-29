@@ -33,6 +33,10 @@ if ! "$dotfiles_bin/system-update" run --execute --confirm --nightly --allow-ina
     echo "nightly-maintenance: system update failed; continuing to remaining steps" >&2
 fi
 
+if ! npx --yes skills update -g -y; then
+    echo "nightly-maintenance: agent skills update failed; continuing to remaining steps" >&2
+fi
+
 # Check, update, and sync acs-mirror (best-effort when off VPN)
 if ! sync_acs_mirror; then
     echo "nightly-maintenance: acs-mirror sync failed; continuing to remaining steps" >&2

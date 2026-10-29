@@ -54,6 +54,8 @@
           inherit (unstable)
             neovim uv pixi bun python315 deno pnpm ruff pyright
             rclone restic glab brave google-chrome;
+          # Keep semgrep on un-overlaid stable nixpkgs so unstable.ruff does not bust its cache.
+          semgrep = (import nixpkgs { inherit system; inherit (prev) config; }).semgrep;
           ghostty = unstable.ghostty.overrideAttrs (old: {
             patches = (old.patches or []) ++ [ ./patches/ghostty-child-environment.patch ];
           });

@@ -28,6 +28,7 @@ EXISTING_HOME_PACKAGES = {
 }
 AGENT_CONFIG_PACKAGES = {
     "bubblewrap", "gnupatch", "curl", "xdg-utils", "socat", "yt-dlp",
+    "gitleaks", "semgrep", "osv-scanner",
 }
 PYTHON_MATRIX = {
     "python315", "(lib.setPrio 6 python314)", "(lib.setPrio 7 python313)",
@@ -93,6 +94,7 @@ class TestFlakeAndHome(unittest.TestCase):
             'system = "x86_64-linux";',
             'unstable = import nixpkgs-unstable',
             'inherit unstable;',
+            'semgrep = (import nixpkgs { inherit system; inherit (prev) config; }).semgrep;',
             'pkgs = import nixpkgs',
             'overlays = [ unstableOverlay ];',
             'overlays.default = unstableOverlay;',
@@ -579,6 +581,8 @@ class TestFlakeAndHome(unittest.TestCase):
                 stub.chmod(0o755)
 
             for name, body in (
+                ("npx", 'echo "npx $*" >> "$CALL_LOG"\n'
+                        'if [ "${FAIL_NPX:-0}" = "1" ]; then exit 1; fi\n'),
                 ("uv", 'echo "uv $*" >> "$CALL_LOG"\n'
                        'if [ "${FAIL_UV:-0}" = "1" ]; then exit 1; fi\n'),
                 ("git", 'echo "git $*" >> "$CALL_LOG"\n'
@@ -600,11 +604,12 @@ class TestFlakeAndHome(unittest.TestCase):
             # Off-VPN failure in acs-mirror check skips update/sync, still attempts git pull and powers off at 22:00.
             result = subprocess.run(
                 [str(script)],
-                env={**base_env, "FAIL_UV": "1", "FAIL_GIT": "1", "FAIL_MAINTENANCE": "1", "FAKE_HOUR": "22"},
+                env={**base_env, "FAIL_NPX": "1", "FAIL_UV": "1", "FAIL_GIT": "1", "FAIL_MAINTENANCE": "1", "FAKE_HOUR": "22"},
                 check=True, text=True, capture_output=True,
             )
             self.assertIn("backup verification failed", result.stderr)
             self.assertIn("system update failed", result.stderr)
+            self.assertIn("agent skills update failed", result.stderr)
             self.assertIn("acs-mirror sync failed", result.stderr)
             self.assertIn("acs-scheduler pull failed", result.stderr)
             self.assertEqual(
@@ -612,6 +617,7 @@ class TestFlakeAndHome(unittest.TestCase):
                 [
                     "daily-backup verify",
                     "system-update run --execute --confirm --nightly --allow-inactive-drivestrike",
+                    "npx --yes skills update -g -y",
                     "uv run acs-mirror check",
                     "git pull origin master",
                     "systemctl poweroff -i",
@@ -630,6 +636,7 @@ class TestFlakeAndHome(unittest.TestCase):
                 [
                     "daily-backup verify",
                     "system-update run --execute --confirm --nightly --allow-inactive-drivestrike",
+                    "npx --yes skills update -g -y",
                     "uv run acs-mirror check",
                     "uv run acs-mirror update",
                     "uv run acs-mirror sync",
