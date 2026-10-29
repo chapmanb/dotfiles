@@ -26,7 +26,10 @@ EXISTING_HOME_PACKAGES = {
     "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
 }
-HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql84"}
+AGENT_CONFIG_PACKAGES = {
+    "bubblewrap", "gnupatch", "curl", "xdg-utils", "socat", "yt-dlp",
+}
+HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql84"} | AGENT_CONFIG_PACKAGES
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
     "config/nvim/init.lua": "11445b38ebc3983654b1b40aa5541fb1bef92114fbdc5750b247ab17e552c15c",
@@ -84,8 +87,8 @@ class TestFlakeAndHome(unittest.TestCase):
         nodes = json.loads((ROOT / "flake.lock").read_text())["nodes"]
         stable_inputs = (
             ("nixpkgs", "NixOS", "nixpkgs", "nixos-26.05",
-             "718f670e845328e9c2cecdd832835712b2cbd065",
-             "sha256-Ee5BWo8sh3pGt70QUdRajnaginqFmWvrtdBc4gJzhks=", 1793015021),
+             "08d3a97586f6b6343b3b5e799980773629432610",
+             "sha256-56mFMf8heLNfYhcgbrh4GpN5x+G9JOfTFXZC3n6w0qM=", 1793183032),
             ("home-manager", "nix-community", "home-manager", "release-26.05",
              "24f2190587513b9c2f73db112a17844ae912d965",
              "sha256-199i7ubVSXTMl+0AAlL7cVCXSjcI+jWByMcimYjeMX0=", 1792818383),
@@ -325,7 +328,7 @@ class TestFlakeAndHome(unittest.TestCase):
         home = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
-        self.assertEqual(len(HOME_PACKAGES), 65)
+        self.assertEqual(len(HOME_PACKAGES), 71)
         self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
         self.assertIn('".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;', home)
         for source in ("flake.nix", "home/default.nix", "lib/dotfiles_migrate/daily_backup.py"):
@@ -339,10 +342,11 @@ class TestFlakeAndHome(unittest.TestCase):
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
         self.assertEqual(len(EXISTING_HOME_PACKAGES), 64)
-        self.assertCountEqual(packages.group(1).split(), EXISTING_HOME_PACKAGES | {"mysql84"})
+        self.assertEqual(len(AGENT_CONFIG_PACKAGES), 6)
+        self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
         self.assertEqual(
             hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest(),
-            "a5ab1b92bdef4ae1a0686109c5fbcf42cf442815918c2234a9373d6210896106",
+            "1f4965967bb8f2d62ce7d0e4b6ac58769468cc98e74e0f7680066b326216ae40",
         )
 
     def test_mysql84_slowlog_runtime_is_declared_and_scoped(self):
