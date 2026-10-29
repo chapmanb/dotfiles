@@ -179,7 +179,7 @@ function cd() {
 
   ## If env folder is found then activate the vitualenv
   function activate_venv() {
-    if [[ -f "${DEFAULT_ENV_PATH}/bin/activate" ]] ; then
+    if [[ -f "${DEFAULT_ENV_PATH}/bin/activate" && -x "${DEFAULT_ENV_PATH}/bin/python" ]] ; then
       source "${DEFAULT_ENV_PATH}/bin/activate"
       echo "Activating ${VIRTUAL_ENV}"
     fi

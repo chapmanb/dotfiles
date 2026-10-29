@@ -2,6 +2,13 @@
 
 let
   dotfiles = "${config.home.homeDirectory}/.dotfiles";
+  # Expose only keyring so its bundled interpreter cannot shadow the Python matrix.
+  keyringWithGar = pkgs.runCommand "keyring-with-gar" {
+    meta.mainProgram = "keyring";
+  } ''
+    mkdir -p "$out/bin"
+    ln -s "${pkgs.python3.withPackages (ps: [ ps.keyring ps.keyrings-google-artifactregistry-auth ])}/bin/keyring" "$out/bin/keyring"
+  '';
   # The upstream slow-log script has an unusable Perl shebang and needs my_print_defaults.
   mysql84 = pkgs.symlinkJoin {
     name = "mysql-${pkgs.mysql84.version}-slowlog-runtime";
@@ -25,7 +32,10 @@ in {
     ripgrep fd bat fzf jq rclone restic pkgs.unstable.zstd git glab neovim ghostty tmux
     awscli2 snowflake-cli babashka clojure leiningen ruff pyright tree-sitter
     xclip wl-clipboard pass gnupg
-    pkgs.unstable.nodejs_24 python315 uv pixi bun deno pnpm
+    pkgs.unstable.nodejs_24 python315
+    (lib.setPrio 6 python314) (lib.setPrio 7 python313)
+    (lib.setPrio 8 python312) (lib.setPrio 9 python311)
+    keyringWithGar uv pixi bun deno pnpm
     brave libreoffice inkscape redshift
     gh go-task glow lazygit gitu mdbook pandoc clj-kondo clojure-lsp
     kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk pre-commit

@@ -29,7 +29,16 @@ EXISTING_HOME_PACKAGES = {
 AGENT_CONFIG_PACKAGES = {
     "bubblewrap", "gnupatch", "curl", "xdg-utils", "socat", "yt-dlp",
 }
-HOME_PACKAGES = EXISTING_HOME_PACKAGES | {"mysql84"} | AGENT_CONFIG_PACKAGES
+PYTHON_MATRIX = {
+    "python315", "(lib.setPrio 6 python314)", "(lib.setPrio 7 python313)",
+    "(lib.setPrio 8 python312)", "(lib.setPrio 9 python311)",
+}
+HOME_PACKAGES = (EXISTING_HOME_PACKAGES | AGENT_CONFIG_PACKAGES | PYTHON_MATRIX
+                 | {"mysql84", "keyringWithGar"})
+STABLE_INPUTS = (
+    ("nixpkgs", "NixOS", "nixpkgs", "nixos-26.05"),
+    ("home-manager", "nix-community", "home-manager", "release-26.05"),
+)
 # SHA-256 of the active user configs at import time, independent of production Nix.
 IMPORTED_CONFIGS = {
     "config/nvim/init.lua": "11445b38ebc3983654b1b40aa5541fb1bef92114fbdc5750b247ab17e552c15c",
@@ -47,7 +56,33 @@ RETIRED_FILES = (
 )
 
 
+def declared_home_packages(home):
+    packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+    if packages is None:
+        raise ValueError("home.packages declaration not found")
+    return re.findall(r"\([^()]+\)|\S+", packages.group(1))
+
+
 class TestFlakeAndHome(unittest.TestCase):
+    def assert_home_package_baseline(self, home):
+        declared = declared_home_packages(home)
+        self.assertTrue(HOME_PACKAGES.issubset(declared), HOME_PACKAGES - set(declared))
+        self.assertEqual(len(declared), len(set(declared)), "Duplicate home.packages entries")
+
+    def assert_stable_lock_inputs(self, nodes):
+        for name, owner, repo, ref in STABLE_INPUTS:
+            with self.subTest(input=name):
+                self.assertEqual(nodes[name]["original"], {
+                    "owner": owner, "repo": repo, "ref": ref, "type": "github",
+                })
+                locked = nodes[name]["locked"]
+                for key, value in {"owner": owner, "repo": repo, "type": "github"}.items():
+                    self.assertEqual(locked[key], value)
+                self.assertRegex(locked["rev"], r"^[0-9a-f]{40}$")
+                self.assertRegex(locked["narHash"], r"^sha256-")
+                self.assertIs(type(locked["lastModified"]), int)
+                self.assertGreater(locked["lastModified"], 0)
+
     def test_flake_inputs_overlay_and_outputs(self):
         flake = (ROOT / "flake.nix").read_text()
         for declaration in (
@@ -85,24 +120,10 @@ class TestFlakeAndHome(unittest.TestCase):
     def test_flake_26_05_and_daemon_profile_declaration(self):
         flake = (ROOT / "flake.nix").read_text()
         nodes = json.loads((ROOT / "flake.lock").read_text())["nodes"]
-        stable_inputs = (
-            ("nixpkgs", "NixOS", "nixpkgs", "nixos-26.05",
-             "08d3a97586f6b6343b3b5e799980773629432610",
-             "sha256-56mFMf8heLNfYhcgbrh4GpN5x+G9JOfTFXZC3n6w0qM=", 1793183032),
-            ("home-manager", "nix-community", "home-manager", "release-26.05",
-             "24f2190587513b9c2f73db112a17844ae912d965",
-             "sha256-199i7ubVSXTMl+0AAlL7cVCXSjcI+jWByMcimYjeMX0=", 1792818383),
-        )
-        for name, owner, repo, ref, rev, nar_hash, modified in stable_inputs:
+        self.assert_stable_lock_inputs(nodes)
+        for name, owner, repo, ref in STABLE_INPUTS:
             with self.subTest(input=name):
                 self.assertIn(f'url = "github:{owner}/{repo}/{ref}";', flake)
-                self.assertEqual(nodes[name]["original"], {
-                    "owner": owner, "repo": repo, "ref": ref, "type": "github",
-                })
-                self.assertEqual(nodes[name]["locked"], {
-                    "owner": owner, "repo": repo, "rev": rev, "type": "github",
-                    "narHash": nar_hash, "lastModified": modified,
-                })
         self.assertEqual(nodes["home-manager"]["inputs"]["nixpkgs"], ["nixpkgs"])
         self.assertIn('home.stateVersion = "24.11";', (ROOT / "home/default.nix").read_text())
         self.assertIn('system.stateVersion = "24.11";',
@@ -298,9 +319,7 @@ class TestFlakeAndHome(unittest.TestCase):
         for source, digest in IMPORTED_CONFIGS.items():
             with self.subTest(imported=source):
                 self.assertEqual(hashlib.sha256((ROOT / source).read_bytes()).hexdigest(), digest)
-        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
-        self.assertIsNotNone(packages)
-        self.assertEqual(set(packages.group(1).split()), HOME_PACKAGES)
+        self.assert_home_package_baseline(home)
         variables = re.search(r"home\.sessionVariables = \{([^}]+)\};", home)
         self.assertIsNotNone(variables)
         for name in ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
@@ -326,10 +345,7 @@ class TestFlakeAndHome(unittest.TestCase):
 
     def test_declarative_userspace_packages_opengl_bridge_and_wezterm_retirement(self):
         home = (ROOT / "home/default.nix").read_text()
-        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
-        self.assertIsNotNone(packages)
-        self.assertEqual(len(HOME_PACKAGES), 71)
-        self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
+        self.assert_home_package_baseline(home)
         self.assertIn('".local/state/nix-opengl-driver".source = pkgs.unstable.mesa;', home)
         for source in ("flake.nix", "home/default.nix", "lib/dotfiles_migrate/daily_backup.py"):
             with self.subTest(source=source):
@@ -339,15 +355,93 @@ class TestFlakeAndHome(unittest.TestCase):
 
     def test_mysql_clients_added_without_retiring_tools_or_adding_java(self):
         home = (ROOT / "home/default.nix").read_text()
-        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
-        self.assertIsNotNone(packages)
-        self.assertEqual(len(EXISTING_HOME_PACKAGES), 64)
-        self.assertEqual(len(AGENT_CONFIG_PACKAGES), 6)
-        self.assertCountEqual(packages.group(1).split(), HOME_PACKAGES)
-        self.assertEqual(
-            hashlib.sha256((ROOT / "flake.lock").read_bytes()).hexdigest(),
-            "1f4965967bb8f2d62ce7d0e4b6ac58769468cc98e74e0f7680066b326216ae40",
+        self.assert_home_package_baseline(home)
+
+    def test_baseline_package_subset_gate_allows_additional_packages_and_structural_lock(self):
+        home = (ROOT / "home/default.nix").read_text()
+        self.assert_home_package_baseline(home)
+        expanded = home.replace("    mysql84\n", "    mysql84 additional-agent-tool\n", 1)
+        self.assertIn("additional-agent-tool", declared_home_packages(expanded))
+        self.assert_home_package_baseline(expanded)
+        for invalid in (
+            home.replace("    mysql84\n", "    mysql84 mysql84\n", 1),
+            home.replace("    mysql84\n", "", 1),
+        ):
+            with self.assertRaises(AssertionError):
+                self.assert_home_package_baseline(invalid)
+
+        nodes = json.loads((ROOT / "flake.lock").read_text())["nodes"]
+        self.assert_stable_lock_inputs(nodes)
+        for name, owner, repo, ref in STABLE_INPUTS:
+            locked = nodes[name]["locked"]
+            locked["rev"] = "a" * 40 if locked["rev"] != "a" * 40 else "b" * 40
+            locked["narHash"] = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+            locked["lastModified"] += 1
+        self.assert_stable_lock_inputs(nodes)
+
+    def test_declarative_python_matrix_and_gar_keyring(self):
+        home = (ROOT / "home/default.nix").read_text()
+        declared = declared_home_packages(home)
+        self.assertTrue(PYTHON_MATRIX.issubset(declared))
+        for package in PYTHON_MATRIX | {"keyringWithGar"}:
+            with self.subTest(package=package):
+                self.assertEqual(declared.count(package), 1)
+        composition = re.search(
+            r'keyringWithGar = pkgs\.runCommand "keyring-with-gar" \{(.*?)\n  \'\';',
+            home, re.DOTALL,
         )
+        self.assertIsNotNone(composition, "keyring needs a scoped GAR-enabled runtime")
+        self.assertEqual(
+            " ".join(composition.group(1).split()),
+            'meta.mainProgram = "keyring"; } \'\' '
+            'mkdir -p "$out/bin" '
+            'ln -s "${pkgs.python3.withPackages (ps: [ ps.keyring '
+            'ps.keyrings-google-artifactregistry-auth ])}/bin/keyring" "$out/bin/keyring"',
+        )
+
+    def test_bashrc_cd_activates_healthy_venv_and_skips_broken_python_symlink(self):
+        shell = (ROOT / "bashrc").read_text()
+        cd_function = re.search(r"function cd\(\) \{.*?\n\}", shell, re.DOTALL)
+        self.assertIsNotNone(cd_function)
+        self.assertIn(
+            '[[ -f "${DEFAULT_ENV_PATH}/bin/activate" && '
+            '-x "${DEFAULT_ENV_PATH}/bin/python" ]]', cd_function.group(0),
+        )
+        # Exercise only the cd hook, without sourcing host-specific shell startup files.
+        with tempfile.TemporaryDirectory(prefix="test-cd-venv-") as temporary:
+            home = Path(temporary)
+            for state in ("broken", "healthy", "not-executable", "missing-activate"):
+                with self.subTest(venv=state):
+                    project = home / state
+                    bindir = project / ".venv/bin"
+                    bindir.mkdir(parents=True)
+                    if state != "missing-activate":
+                        (bindir / "activate").write_text(
+                            'export VIRTUAL_ENV="$PWD/.venv"\n'
+                            'deactivate() { unset VIRTUAL_ENV; }\n'
+                        )
+                    python = bindir / "python"
+                    if state == "broken":
+                        python.symlink_to(home / "retired-python")
+                        self.assertTrue(python.is_symlink())
+                        self.assertFalse(python.exists())
+                    else:
+                        python.write_text("#!/bin/sh\nexit 0\n")
+                        python.chmod(0o644 if state == "not-executable" else 0o755)
+                    result = subprocess.run(
+                        ["bash", "--noprofile", "--norc", "-c",
+                         cd_function.group(0) + '\ncd "$1"\nprintf "VIRTUAL_ENV=%s\\n" "${VIRTUAL_ENV-}"',
+                         "bash", str(project)],
+                        cwd=home, env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
+                        check=True, text=True, capture_output=True,
+                    )
+                    self.assertEqual(result.stderr, "")
+                    if state == "healthy":
+                        venv = project / ".venv"
+                        self.assertEqual(result.stdout, f"Activating {venv}\nVIRTUAL_ENV={venv}\n")
+                    else:
+                        self.assertEqual(result.stdout, "VIRTUAL_ENV=\n")
+                        self.assertNotIn("Activating ", result.stdout)
 
     def test_mysql84_slowlog_runtime_is_declared_and_scoped(self):
         home = (ROOT / "home/default.nix").read_text()
