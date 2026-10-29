@@ -2,6 +2,8 @@
 
 let
   ghostty = "${pkgs.ghostty}/bin/ghostty";
+  brave = "${pkgs.brave}/bin/brave";
+  redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";
 in {
   home.packages = [ pkgs.xdg-terminal-exec ];
   home.sessionVariables.TERMINAL = ghostty;
@@ -18,6 +20,30 @@ in {
       name = "Ghostty";
       command = ghostty;
       binding = "<Primary><Alt>t";
+    };
+    "org/gnome/shell" = {
+      disable-user-extensions = false;
+      enabled-extensions = [
+        "auto-move-windows@gnome-shell-extensions.gcampax.github.com"
+        "desktop-icons@csoriano"
+        "ubuntu-appindicators@ubuntu.com"
+        "ubuntu-dock@ubuntu.com"
+      ];
+    };
+    "org/gnome/shell/extensions/auto-move-windows" = {
+      application-list = [
+        "google-chrome.desktop:2"
+        "firefox.desktop:2"
+        "brave-browser.desktop:2"
+        "com.brave.Browser.desktop:2"
+        "org.gnome.Terminal.desktop:3"
+        "org.wezfurlong.wezterm.desktop:3"
+        "com.mitchellh.ghostty.desktop:3"
+        "code.desktop:4"
+        "Zoom.desktop:1"
+        "antigravity.desktop:4"
+        "cursor.desktop:4"
+      ];
     };
   };
 
@@ -68,6 +94,15 @@ in {
 
     "xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\n";
 
+    "redshift/redshift.conf".text = ''
+      [redshift]
+      location-provider=manual
+
+      [manual]
+      lat=42.36
+      lon=-71.06
+    '';
+
     # Replace the unmanaged legacy entry so both terminals cannot autostart.
     "autostart/gnome-terminal.desktop" = {
       force = true;
@@ -88,5 +123,33 @@ in {
       OnlyShowIn=GNOME;
       X-GNOME-Autostart-enabled=true
     '';
+    "autostart/brave-browser.desktop" = {
+      force = true;
+      text = ''
+        [Desktop Entry]
+        Type=Application
+        Name=Brave Web Browser
+        Exec=${brave}
+        TryExec=${brave}
+        Terminal=false
+        OnlyShowIn=GNOME;
+        X-GNOME-Autostart-enabled=true
+      '';
+    };
+    "autostart/redshift-gtk.desktop" = {
+      force = true;
+      text = ''
+        [Desktop Entry]
+        Type=Application
+        Name=Redshift
+        Exec=${redshiftGtk}
+        TryExec=${redshiftGtk}
+        Icon=redshift
+        Terminal=false
+        OnlyShowIn=GNOME;
+        Hidden=false
+        X-GNOME-Autostart-enabled=true
+      '';
+    };
   };
 }

@@ -160,6 +160,8 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("brave", packages.group(1).split())
         self.assertNotIn("excludePackages", (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
         self.assertIn('ghostty = "${pkgs.ghostty}/bin/ghostty";', desktop)
+        self.assertIn('brave = "${pkgs.brave}/bin/brave";', desktop)
+        self.assertIn('redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";', desktop)
         self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
         self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
         self.assertIn("exec = ghostty;", desktop)
@@ -170,15 +172,40 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty"', desktop)
         self.assertIn('binding = "<Primary><Alt>t";', desktop)
         self.assertIn("command = ghostty;", desktop)
+        self.assertIn('"org/gnome/shell" = {', desktop)
+        self.assertIn("disable-user-extensions = false;", desktop)
+        self.assertIn('"auto-move-windows@gnome-shell-extensions.gcampax.github.com"', desktop)
+        self.assertIn('"org/gnome/shell/extensions/auto-move-windows" = {', desktop)
+        for placement in (
+            '"brave-browser.desktop:2"',
+            '"com.brave.Browser.desktop:2"',
+            '"com.mitchellh.ghostty.desktop:3"',
+        ):
+            self.assertIn(placement, desktop)
+        self.assertIn('"redshift/redshift.conf".text =', desktop)
+        self.assertIn("location-provider=manual", desktop)
         legacy, login = desktop.split('"autostart/com.mitchellh.ghostty.desktop".text =', 1)
         legacy = legacy.split('"autostart/gnome-terminal.desktop" =', 1)[1]
         self.assertIn("force = true;", legacy)
         self.assertIn("Hidden=true", legacy)
+        ghostty_login, brave_and_redshift = login.split('"autostart/brave-browser.desktop" =', 1)
+        brave_login, redshift_login = brave_and_redshift.split('"autostart/redshift-gtk.desktop" =', 1)
         for line in ("Type=Application", "Exec=${ghostty}", "TryExec=${ghostty}",
                      "Terminal=false", "OnlyShowIn=GNOME;", "X-GNOME-Autostart-enabled=true"):
-            self.assertIn(line, login)
-        self.assertNotIn("Hidden=true", login)
+            self.assertIn(line, ghostty_login)
+        self.assertNotIn("Hidden=true", ghostty_login)
+        self.assertIn("force = true;", brave_login)
+        for line in ("Type=Application", "Name=Brave Web Browser", "Exec=${brave}",
+                     "TryExec=${brave}", "Terminal=false", "OnlyShowIn=GNOME;",
+                     "X-GNOME-Autostart-enabled=true"):
+            self.assertIn(line, brave_login)
+        self.assertIn("force = true;", redshift_login)
+        for line in ("Type=Application", "Name=Redshift", "Exec=${redshiftGtk}",
+                     "TryExec=${redshiftGtk}", "Icon=redshift", "Terminal=false",
+                     "OnlyShowIn=GNOME;", "Hidden=false", "X-GNOME-Autostart-enabled=true"):
+            self.assertIn(line, redshift_login)
         self.assertNotIn("/usr/bin/gnome-terminal", desktop)
+        self.assertNotIn("/usr/bin/brave-browser", desktop)
 
     def test_ghostty_desktop_launcher_bypasses_systemd_activation(self):
         desktop = (ROOT / "home/ghostty.nix").read_text()
