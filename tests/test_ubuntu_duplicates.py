@@ -96,7 +96,7 @@ class TestUbuntuDuplicates(unittest.TestCase):
             "version": 1, "repository": gatekeeper.RESTIC_REPOSITORY,
             "browsable_remote": gatekeeper.BROWSABLE_REMOTE,
             "verified_at": datetime.now(timezone.utc).isoformat(),
-            "Snapshot Backup": {"status": "VERIFIED", "snapshot_count": 1},
+            "Snapshot Backup": {"status": "VERIFIED", "encrypted": True, "snapshot_count": 1},
             "Browsable Sync": {"status": "VERIFIED", "roots": [
                 {"source": str(self.home / root),
                  "remote": f"{gatekeeper.BROWSABLE_REMOTE}/{root}", "status": "VERIFIED"}

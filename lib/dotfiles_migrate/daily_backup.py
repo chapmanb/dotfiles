@@ -22,7 +22,8 @@ RESTIC_REPOSITORY = f"rclone:{BACKUP_REMOTE}/restic-repo"
 BROWSABLE_REMOTE = f"{BACKUP_REMOTE}/browsable"
 TRASH_REMOTE = f"{BACKUP_REMOTE}/browsable-trash"
 LEGACY_REMOTE = "gdrive:bchapman-ubnt-backup"
-BROWSABLE_ROOTS = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
+BROWSABLE_ROOTS = ("personal", "Documents")
+GINKGO_ROOTS = ("ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
 SNAPSHOT_ROOTS = (
     ".dotfiles", ".ssh", ".gnupg", ".password-store", ".aws", ".kube", ".vpn",
     ".snowflake", ".dbt", ".pypirc", ".bashrc.local", ".bashrc.ginkgo", "secrets.env",
@@ -34,7 +35,7 @@ EXCLUDED_CODE_REPOS = frozenset({"acs-mirror-local", "hamilton-ultimate"})
 PRIVATE_EXCLUSIONS = (
     ".dotfiles/tmp", ".codex/packages", ".pi/agent/npm", ".pi/agent/git",
     ".pi/agent/sessions", ".pi/agent/web-search-cache", ".cache", ".local/share/pnpm",
-    ".bun", ".nvm", "bio", "ginkgo/guild",
+    ".bun", ".nvm", "bio", "ginkgo/guild", ".config/restic",
     "ginkgo/code/acs-mirror-local", "ginkgo/code/hamilton-ultimate",
 )
 
@@ -213,6 +214,7 @@ class DailyBackup:
                     continue
                 if self._project_is_active(project):
                     paths.append(project)
+        paths.extend(self.home / name for name in GINKGO_ROOTS)
         paths.extend(self.home / name for name in SNAPSHOT_ROOTS if present(self.home / name))
         paths.extend(sorted(self.home.glob(".claude*")))
         return list(dict.fromkeys(paths)) + [self.stage]
@@ -260,16 +262,16 @@ class DailyBackup:
         self._private_state()
         write_private(self.report, json.dumps(report, indent=2) + "\n")
 
-    def _require_browsable_roots(self):
-        for relative in BROWSABLE_ROOTS:
+    def _require_real_roots(self, roots):
+        for relative in roots:
             path = self.home / relative
             if not path.is_dir() or path.is_symlink():
-                raise BackupError(f"Browsable source must be a real directory: {path}")
+                raise BackupError(f"Backup source must be a real directory: {path}")
 
     def run(self):
         self._write_report(self._empty_report())
         self._require_password()
-        self._require_browsable_roots()
+        self._require_real_roots(BROWSABLE_ROOTS + GINKGO_ROOTS)
         self.stage_corp_stack()
         sources = self.snapshot_sources()
         exclusions = self.state / "restic-excludes.txt"
@@ -311,23 +313,44 @@ class DailyBackup:
         # Revoke a previous success before doing anything that might fail.
         self._write_report(report)
         try:
+            self._require_real_roots(GINKGO_ROOTS)
             self._restic("check")
+            config = json.loads(self._restic("cat", "config").stdout)
+            if (not isinstance(config, dict) or type(config.get("version")) is not int
+                    or config["version"] < 2 or not isinstance(config.get("id"), str)
+                    or not config["id"].strip()):
+                raise BackupError("Invalid restic encryption config")
+            keys = json.loads(self._restic("key", "list", "--json").stdout)
+            if not isinstance(keys, list) or not keys or not all(
+                isinstance(key, dict) and isinstance(key.get("id"), str) and key["id"].strip()
+                for key in keys
+            ):
+                raise BackupError("No valid restic encryption keys")
             snapshots = json.loads(self._restic("snapshots", "--json").stdout)
             if not isinstance(snapshots, list) or not snapshots or not all(
-                isinstance(snapshot, dict) and snapshot.get("id") for snapshot in snapshots
+                isinstance(snapshot, dict) and isinstance(snapshot.get("id"), str)
+                and snapshot["id"].strip() for snapshot in snapshots
             ):
                 raise BackupError("No valid restic snapshots")
-            report["Snapshot Backup"] = {"status": "VERIFIED", "snapshot_count": len(snapshots)}
+            paths = snapshots[-1].get("paths", [])
+            if not isinstance(paths, list) or not all(
+                str(self.home / relative) in paths for relative in GINKGO_ROOTS
+            ):
+                raise BackupError("Latest restic snapshot omits required Ginkgo roots")
+            report["Snapshot Backup"] = {
+                "status": "VERIFIED", "encrypted": True, "snapshot_count": len(snapshots),
+            }
         except (BackupError, OSError, ValueError, subprocess.CalledProcessError):
-            report["Snapshot Backup"]["error"] = "Restic check or snapshot presence failed"
+            report["Snapshot Backup"]["error"] = (
+                "Restic check, encryption config/key check, or snapshot coverage failed"
+            )
         roots = report["Browsable Sync"]["roots"]
         for relative in BROWSABLE_ROOTS:
             result = {"source": str(self.home / relative), "remote": f"{BROWSABLE_REMOTE}/{relative}",
                       "status": "UNVERIFIED"}
             try:
                 source = self.home / relative
-                if not source.is_dir() or source.is_symlink():
-                    raise BackupError("Missing browsable source")
+                self._require_real_roots((relative,))
                 self.rclone.run("check", str(source), result["remote"], "--one-way", "--links",
                                 *rclone_exclusions())
                 result["status"] = "VERIFIED"
@@ -345,6 +368,8 @@ class DailyBackup:
         report = json.loads(self.report.read_text())
         if (report.get("version") != 1 or report.get("repository") != RESTIC_REPOSITORY
                 or report.get("browsable_remote") != BROWSABLE_REMOTE
+                or report.get("Snapshot Backup", {}).get("encrypted") is not True
+                or report.get("Snapshot Backup", {}).get("snapshot_count", 0) < 1
                 or any(report.get(tier, {}).get("status") != "VERIFIED"
                        for tier in ("Snapshot Backup", "Browsable Sync"))):
             raise BackupError("Snapshot Backup and Browsable Sync must both be VERIFIED")

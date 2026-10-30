@@ -210,7 +210,7 @@ class TestSystemUpdate(unittest.TestCase):
         self.backup_document = {
             "version": 1, "repository": RESTIC_REPOSITORY, "browsable_remote": BROWSABLE_REMOTE,
             "verified_at": datetime.now(timezone.utc).isoformat(),
-            "Snapshot Backup": {"status": "VERIFIED", "snapshot_count": 1},
+            "Snapshot Backup": {"status": "VERIFIED", "encrypted": True, "snapshot_count": 1},
             "Browsable Sync": {"status": "VERIFIED", "roots": [
                 {"source": str(self.home / name), "remote": f"{BROWSABLE_REMOTE}/{name}", "status": "VERIFIED"}
                 for name in BROWSABLE_ROOTS]},

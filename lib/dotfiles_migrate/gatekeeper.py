@@ -110,6 +110,7 @@ def require_backup(report_path, home):
     snapshot = report.get("Snapshot Backup", {})
     browsable = report.get("Browsable Sync", {})
     if (snapshot.get("status") != "VERIFIED" or snapshot.get("snapshot_count", 0) < 1
+            or snapshot.get("encrypted") is not True
             or browsable.get("status") != "VERIFIED"):
         raise GateError("Daily-backup Snapshot Backup and Browsable Sync must be VERIFIED")
     expected = {(str(home / root), f"{BROWSABLE_REMOTE}/{root}", "VERIFIED")

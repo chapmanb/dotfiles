@@ -25,7 +25,8 @@ REPOSITORY = "rclone:gdrive:bchapman-backup/restic-repo"
 BROWSABLE = "gdrive:bchapman-backup/browsable"
 TRASH = "gdrive:bchapman-backup/browsable-trash"
 LEGACY = "gdrive:bchapman-ubnt-backup"
-ROOTS = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
+ROOTS = ("personal", "Documents")
+GINKGO = ("ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
 SNAPSHOT_PATHS = (
     ".dotfiles", ".ssh", ".gnupg", ".password-store", ".aws", ".kube", ".vpn",
     ".snowflake", ".dbt", ".pypirc", ".bashrc.local", ".bashrc.ginkgo", "secrets.env",
@@ -49,6 +50,7 @@ class OfflineRunner:
         self.git = {}
         self.remote = {}
         self.snapshots = []
+        self.restic_outputs = {}
         self.trash_listing = []
         self.snapshot_files = set()
         self.exclusion_text = ""
@@ -87,7 +89,11 @@ class OfflineRunner:
             elif operation == "cat":
                 if args[operation_index + 1:] != ["config"] or not self.initialized:
                     raise subprocess.CalledProcessError(1, args)
-                output = '{"version": 2}'
+                output = '{"version": 2, "id": "test-repository"}'
+            elif operation == "key":
+                if args[operation_index + 1:] != ["list", "--json"]:
+                    raise AssertionError(args)
+                output = '[{"id": "test-key"}]'
             elif operation == "backup":
                 exclusion_file = Path(args[args.index("--exclude-file") + 1])
                 self.exclusion_text = exclusion_file.read_text()
@@ -103,13 +109,14 @@ class OfflineRunner:
                         if not any(str(path) == pattern or str(path).startswith(pattern + "/")
                                    for pattern in excluded):
                             self.snapshot_files.add(str(path))
-                self.snapshots = [{"id": "b" * 64}]
+                self.snapshots = [{"id": "b" * 64, "paths": sources}]
             elif operation == "snapshots":
                 if args[operation_index + 1:] != ["--json"]:
                     raise AssertionError(args)
                 output = json.dumps(self.snapshots)
             elif operation not in ("check", "forget"):
                 raise AssertionError(args)
+            output = self.restic_outputs.get(operation, output)
         elif args[0] == "rclone":
             config = Path(args[args.index("--config") + 1])
             self.config_observations.append((config, stat.S_IMODE(config.stat().st_mode), config.read_text()))
@@ -190,7 +197,7 @@ class TestDailyBackup(unittest.TestCase):
         self.config = self.home / ".config/rclone/rclone.conf"
         self.file(self.config, "[gdrive]\ntoken = test-only-token\n")
         self.config.chmod(0o600)
-        for relative in ROOTS:
+        for relative in ROOTS + GINKGO:
             self.file(self.home / relative / "document.txt", relative)
         self.file(self.system / "usr/local/share/ca-certificates/Ginkgo_Root.crt", "certificate")
         self.file(self.system / "usr/local/share/ca-certificates/trust_custom.crt", "trust")
@@ -229,6 +236,160 @@ class TestDailyBackup(unittest.TestCase):
 
     def rclone_calls(self, operation):
         return [call for call in self.runner.calls if call[0] == "rclone" and call[3] == operation]
+
+    def test_ginkgo_roots_routed_to_restic_and_password_dir_excluded(self):
+        from dotfiles_migrate import daily_backup
+
+        self.assertEqual(daily_backup.BROWSABLE_ROOTS, ROOTS)
+        self.assertEqual(daily_backup.GINKGO_ROOTS, GINKGO)
+        self.assertIn(".config/restic", daily_backup.PRIVATE_EXCLUSIONS)
+        preserved = []
+        artifacts = []
+        for relative in GINKGO:
+            root = self.home / relative
+            for name in ("old-project/pre-2026.txt", "old-project/.git/HEAD",
+                         "old-project/.git/refs/heads/target", "old-project/.git/objects/venv/blob"):
+                preserved.append(self.file(root / name, timestamp=OLD))
+            for name in ARTIFACTS:
+                artifacts.append(self.file(root / "old-project" / name / "junk"))
+            for marker in ("pyvenv.cfg", "CACHEDIR.TAG"):
+                directory = root / "old-project" / ("marked-" + marker)
+                self.file(directory / marker)
+                artifacts.append(self.file(directory / "junk"))
+        self.ok("init")
+        self.ok("run")
+        syncs = self.rclone_calls("sync")
+        self.assertEqual(len(syncs), 2)
+        self.assertEqual([(call[4], call[5]) for call in syncs], [
+            (str(self.home / relative), f"{BROWSABLE}/{relative}") for relative in ROOTS
+        ])
+        backup = self.restic_calls("backup")[0]
+        sources = backup[backup.index("--exclude-file") + 2:]
+        for relative in GINKGO:
+            self.assertIn(str(self.home / relative), sources)
+        for path in preserved:
+            self.assertLess(path.stat().st_mtime, NEW - 86400)
+            self.assertIn(str(path), self.runner.snapshot_files)
+        for path in artifacts:
+            self.assertNotIn(str(path), self.runner.snapshot_files)
+            self.assertIn(str(path.parent), self.runner.exclusion_text.splitlines())
+        self.assertIn(str(self.password.parent), self.runner.exclusion_text.splitlines())
+        self.assertNotIn(str(self.password), self.runner.snapshot_files)
+        self.assertFalse(any(call[0] == "git" for call in self.runner.calls))
+
+        staged = self.file(self.stage / "previous-stage", "unchanged")
+        for relative in GINKGO + ROOTS:
+            for failure in ("missing", "symlink"):
+                with self.subTest(root=relative, failure=failure):
+                    root = self.home / relative
+                    saved = root.with_name(root.name + "-saved")
+                    root.rename(saved)
+                    if failure == "symlink":
+                        root.symlink_to(saved, target_is_directory=True)
+                    self.runner.calls.clear()
+                    try:
+                        self.assertNotEqual(self.cli("run")[0], 0)
+                        self.assertEqual(self.restic_calls("backup"), [])
+                        self.assertEqual(self.restic_calls("forget"), [])
+                        self.assertEqual(self.rclone_calls("sync"), [])
+                        self.assertEqual(self.rclone_calls("purge"), [])
+                        self.assertEqual(staged.read_text(), "unchanged")
+                        self.assertEqual(json.loads(self.report.read_text())["Snapshot Backup"]["status"],
+                                         "UNVERIFIED")
+                    finally:
+                        if root.is_symlink():
+                            root.unlink()
+                        saved.rename(root)
+
+    def test_verify_enforces_restic_encryption_keys_and_ginkgo_snapshot_paths(self):
+        self.ok("init")
+        self.ok("run")
+        good_snapshots = [
+            {"id": "old-snapshot"},
+            {"id": "latest-snapshot", "paths": [str(self.home / relative) for relative in GINKGO]},
+        ]
+        self.runner.snapshots = good_snapshots
+        self.runner.calls.clear()
+        report = self.ok("verify")
+        self.assertEqual(report["Snapshot Backup"], {
+            "status": "VERIFIED", "encrypted": True, "snapshot_count": 2,
+        })
+        self.assertEqual(json.loads(self.report.read_text()), report)
+        operations = [call[call.index("-o") + 2:] for call in self.runner.calls if call[0] == "restic"]
+        self.assertEqual(operations, [["check"], ["cat", "config"], ["key", "list", "--json"],
+                                      ["snapshots", "--json"]])
+        self.assertEqual([call[4] for call in self.rclone_calls("check")],
+                         [str(self.home / relative) for relative in ROOTS])
+
+        invalid_outputs = []
+        for config in (None, [], {}, {"version": 1, "id": "repo"},
+                       {"version": "2", "id": "repo"}, {"version": 2.0, "id": "repo"},
+                       {"version": True, "id": "repo"}, {"version": 2},
+                       {"version": 2, "id": ""}, {"version": 2, "id": 42}):
+            invalid_outputs.append(("cat", json.dumps(config)))
+        for keys in (None, {}, [], [None], [{}], [{"id": ""}], [{"id": 42}],
+                     [{"id": "valid"}, {}]):
+            invalid_outputs.append(("key", json.dumps(keys)))
+        for snapshots in (None, {}, [], [None], [{}], [{"id": ""}], [{"id": 42}],
+                          [{"id": "snapshot"}], [{"id": "snapshot", "paths": None}],
+                          [{"id": "snapshot", "paths": " ".join(good_snapshots[-1]["paths"])}]):
+            invalid_outputs.append(("snapshots", json.dumps(snapshots)))
+        for relative in GINKGO:
+            invalid_outputs.append(("snapshots", json.dumps([
+                good_snapshots[-1], {"id": "latest", "paths": [
+                    str(self.home / root) for root in GINKGO if root != relative
+                ]},
+            ])))
+        invalid_outputs.extend((operation, "not JSON") for operation in ("cat", "key", "snapshots"))
+        for operation, output in invalid_outputs:
+            with self.subTest(operation=operation, output=output):
+                self.ok("verify")  # A failure must revoke a previously verified report.
+                self.runner.restic_outputs[operation] = output
+                try:
+                    status, stdout, stderr = self.cli("verify")
+                    self.assertEqual(status, 1, stderr)
+                    failed = json.loads(stdout)
+                    self.assertEqual(failed, json.loads(self.report.read_text()))
+                    self.assertEqual(failed["Snapshot Backup"]["status"], "UNVERIFIED")
+                    self.assertNotIn("encrypted", failed["Snapshot Backup"])
+                    self.assertNotEqual(self.cli("retire-legacy-backup", "--execute", "--confirm")[0], 0)
+                finally:
+                    self.runner.restic_outputs.clear()
+        for operation in ("check", "cat", "key", "snapshots"):
+            with self.subTest(command_failure=operation):
+                self.ok("verify")
+                self.runner.fail_restic = operation
+                try:
+                    status, stdout, stderr = self.cli("verify")
+                    self.assertEqual(status, 1, stderr)
+                    self.assertNotIn("private restic failure", stdout + stderr)
+                    self.assertEqual(json.loads(self.report.read_text())["Snapshot Backup"]["status"],
+                                     "UNVERIFIED")
+                finally:
+                    self.runner.fail_restic = None
+        for relative in GINKGO + ROOTS:
+            for failure in ("missing", "symlink"):
+                with self.subTest(root=relative, failure=failure):
+                    self.ok("verify")
+                    root = self.home / relative
+                    saved = root.with_name(root.name + "-saved")
+                    root.rename(saved)
+                    if failure == "symlink":
+                        root.symlink_to(saved, target_is_directory=True)
+                    self.runner.calls.clear()
+                    try:
+                        self.assertEqual(self.cli("verify")[0], 1)
+                        tier = "Snapshot Backup" if relative in GINKGO else "Browsable Sync"
+                        self.assertEqual(json.loads(self.report.read_text())[tier]["status"], "UNVERIFIED")
+                        if relative in GINKGO:
+                            self.assertFalse(any(call[0] == "restic" for call in self.runner.calls))
+                        self.assertEqual(self.restic_calls("forget"), [])
+                        self.assertEqual(self.rclone_calls("sync"), [])
+                        self.assertEqual(self.rclone_calls("purge"), [])
+                    finally:
+                        if root.is_symlink():
+                            root.unlink()
+                        saved.rename(root)
 
     def test_retired_wezterm_config_is_not_a_snapshot_source(self):
         retired = self.file(self.home / ".wezterm.lua", "retired terminal config")
@@ -303,7 +464,7 @@ class TestDailyBackup(unittest.TestCase):
                     for path in missing:
                         path.with_name(path.name + "-saved").rename(path)
         self.assertEqual(len(self.restic_calls("backup")), 3)
-        self.assertEqual(len(self.rclone_calls("sync")), 15)
+        self.assertEqual(len(self.rclone_calls("sync")), 6)
 
         # A declarative-only installation may have no locally installed client.
         shutil.rmtree(certs)
@@ -417,7 +578,7 @@ class TestDailyBackup(unittest.TestCase):
         self.assertIn(str(active / "target"), self.runner.exclusion_text.splitlines())
         self.assertFalse(any(str(directory) in self.runner.exclusion_text for directory in blocked))
         self.assertEqual(len(self.restic_calls("forget")), 1)
-        self.assertEqual(len(self.rclone_calls("sync")), 5)
+        self.assertEqual(len(self.rclone_calls("sync")), 2)
 
     def test_run_tolerates_unreadable_project_entry_metadata(self):
         self.ok("init")
@@ -480,7 +641,7 @@ class TestDailyBackup(unittest.TestCase):
         self.assertEqual(len(backup), 1)
         call = backup[0]
         sources = set(call[call.index("--exclude-file") + 2:])
-        expected = {str(self.home / path) for path in SNAPSHOT_PATHS}
+        expected = {str(self.home / path) for path in SNAPSHOT_PATHS + GINKGO}
         expected.update(map(str, [active, code / "commit-active", code / "agent-plans", self.stage,
                                   self.home / ".claude.backup"]))
         self.assertEqual(sources, expected)
@@ -531,7 +692,7 @@ class TestDailyBackup(unittest.TestCase):
         ]
         self.ok("run")
         syncs = self.rclone_calls("sync")
-        self.assertEqual(len(syncs), 5)
+        self.assertEqual(len(syncs), 2)
         self.assertEqual({call[4] for call in syncs}, {str(self.home / path) for path in ROOTS})
         for relative in ROOTS:
             call = next(call for call in syncs if call[4] == str(self.home / relative))
@@ -563,7 +724,7 @@ class TestDailyBackup(unittest.TestCase):
         self.assertEqual(len(self.restic_calls("check")), 1)
         self.assertEqual(len(self.restic_calls("snapshots")), 1)
         checks = self.rclone_calls("check")
-        self.assertEqual(len(checks), 5)
+        self.assertEqual(len(checks), 2)
         for relative in ROOTS:
             call = next(call for call in checks if call[4] == str(self.home / relative))
             self.assertEqual(call[5], f"{BROWSABLE}/{relative}")
@@ -591,7 +752,9 @@ class TestDailyBackup(unittest.TestCase):
         for failure in ("check", "empty-snapshots", "browsable", "missing-local-root"):
             with self.subTest(failure=failure):
                 self.runner.fail_restic = "check" if failure == "check" else None
-                self.runner.snapshots = [] if failure == "empty-snapshots" else [{"id": "a" * 64}]
+                self.runner.snapshots = [] if failure == "empty-snapshots" else [{
+                    "id": "a" * 64, "paths": [str(self.home / relative) for relative in GINKGO],
+                }]
                 self.runner.fail_check = str(self.home / "personal") if failure == "browsable" else None
                 missing = self.home / "Documents"
                 if failure == "missing-local-root":
@@ -631,7 +794,9 @@ class TestDailyBackup(unittest.TestCase):
 
     def test_dry_runs_do_not_write_or_invoke_external_commands(self):
         for command in ("stage-corp-stack", "init", "run", "verify"):
-            self.assertEqual(self.ok(command, "--dry-run")["status"], "DRY_RUN")
+            result = self.ok(command, "--dry-run")
+            self.assertEqual(result["status"], "DRY_RUN")
+            self.assertEqual(result["browsable_roots"], ["personal", "Documents"])
         self.assertFalse(self.state.exists())
         self.assertFalse(self.password.exists())
         self.assertEqual(self.runner.calls, [])
@@ -669,6 +834,43 @@ class TestDailyBackup(unittest.TestCase):
         self.assertEqual(self.restic_calls("forget"), [])
         self.assertEqual(self.rclone_calls("sync"), [])
         self.assertEqual(self.rclone_calls("purge"), [])
+
+    def test_retirement_requires_encrypted_snapshot_and_two_browsable_roots(self):
+        self.ok("init")
+        self.ok("run")
+        report = self.ok("verify")
+        invalid_reports = []
+        for encrypted in (None, False, 1, "true"):
+            invalid = json.loads(json.dumps(report))
+            if encrypted is None:
+                invalid["Snapshot Backup"].pop("encrypted")
+            else:
+                invalid["Snapshot Backup"]["encrypted"] = encrypted
+            invalid_reports.append(invalid)
+        invalid = json.loads(json.dumps(report))
+        invalid["Snapshot Backup"]["snapshot_count"] = 0
+        invalid_reports.append(invalid)
+        for missing in ROOTS:
+            invalid = json.loads(json.dumps(report))
+            invalid["Browsable Sync"]["roots"] = [
+                root for root in invalid["Browsable Sync"]["roots"]
+                if root["source"] != str(self.home / missing)
+            ]
+            invalid_reports.append(invalid)
+        invalid = json.loads(json.dumps(report))
+        invalid["Browsable Sync"]["roots"].extend([
+            {"source": str(self.home / root), "remote": f"{BROWSABLE}/{root}", "status": "VERIFIED"}
+            for root in GINKGO
+        ])
+        invalid_reports.append(invalid)
+        for invalid in invalid_reports:
+            with self.subTest(report=invalid):
+                self.report.write_text(json.dumps(invalid))
+                self.assertNotEqual(self.cli("retire-legacy-backup", "--execute", "--confirm")[0], 0)
+                self.assertEqual(self.rclone_calls("purge"), [])
+        self.report.write_text(json.dumps(report))
+        self.ok("retire-legacy-backup", "--execute", "--confirm")
+        self.assertEqual([call[4] for call in self.rclone_calls("purge")], [LEGACY])
 
     def test_retirement_rejects_report_from_another_home_or_incomplete_roots(self):
         self.ok("init")

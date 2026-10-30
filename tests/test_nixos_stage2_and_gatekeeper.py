@@ -32,7 +32,7 @@ WORKSPACES = (
     ".password-store", ".aws", ".kube", ".vpn", ".snowflake", ".dbt",
     ".pi", ".claude", ".codex", ".agents", ".gemini",
 )
-BROWSABLE = ("personal", "Documents", "ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
+BROWSABLE = ("personal", "Documents")
 MYSQL_CLIENT_BINARIES = (
     "mysql", "mysqladmin", "mysqlcheck", "mysqldump", "mysqlimport",
     "mysqlshow", "mysqlslap", "mysql_config_editor", "mysqldumpslow",
@@ -215,7 +215,7 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             "version": 1, "repository": "rclone:gdrive:bchapman-backup/restic-repo",
             "browsable_remote": "gdrive:bchapman-backup/browsable",
             "verified_at": datetime.now(timezone.utc).isoformat(),
-            "Snapshot Backup": {"status": "VERIFIED", "snapshot_count": 1},
+            "Snapshot Backup": {"status": "VERIFIED", "encrypted": True, "snapshot_count": 1},
             "Browsable Sync": {"status": "VERIFIED", "roots": [
                 {"source": str(self.home / root),
                  "remote": f"gdrive:bchapman-backup/browsable/{root}", "status": "VERIFIED"}
@@ -248,6 +248,42 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
 
     def assert_no_host_mutations(self):
         self.assertFalse(any(call[0] in ("sudo", "home-manager") for call in self.runner.calls))
+
+    def test_gatekeeper_requires_encrypted_snapshot_backup_and_two_browsable_roots(self):
+        self.assertEqual(gatekeeper.BROWSABLE_ROOTS, ("personal", "Documents"))
+        code, output, errors = self.invoke("preflight-ubuntu")
+        self.assertEqual(code, 0, errors)
+        self.assertEqual(json.loads(output)["daily_backup"], "VERIFIED")
+        invalid_reports = []
+        for encrypted in (None, False, 1, "true"):
+            report = json.loads(json.dumps(self.good_report))
+            if encrypted is None:
+                report["Snapshot Backup"].pop("encrypted")
+            else:
+                report["Snapshot Backup"]["encrypted"] = encrypted
+            invalid_reports.append(report)
+        for missing in BROWSABLE:
+            report = json.loads(json.dumps(self.good_report))
+            report["Browsable Sync"]["roots"] = [
+                root for root in report["Browsable Sync"]["roots"]
+                if root["source"] != str(self.home / missing)
+            ]
+            invalid_reports.append(report)
+        report = json.loads(json.dumps(self.good_report))
+        report["Browsable Sync"]["roots"].extend([
+            {"source": str(self.home / root),
+             "remote": f"gdrive:bchapman-backup/browsable/{root}", "status": "VERIFIED"}
+            for root in ("ginkgo/analyses", "ginkgo/methods", "ginkgo/notes")
+        ])
+        invalid_reports.append(report)
+        for report in invalid_reports:
+            for command in ("preflight-ubuntu", "clean-user-space", "activate-host-bridge",
+                            "simplify-ubuntu-host", "prune-ubuntu-duplicates"):
+                with self.subTest(report=report, command=command):
+                    self.report.write_text(json.dumps(report))
+                    self.runner.calls.clear()
+                    self.assertEqual(self.invoke(command, "--execute", "--confirm")[0], 1)
+                    self.assertEqual(self.runner.calls, [])
 
     def test_preflight_ubuntu_verifies_git_flake_source_corp_services_and_nix_binaries(self):
         self.assertEqual(set(gatekeeper.MIGRATED_BINARIES), {
