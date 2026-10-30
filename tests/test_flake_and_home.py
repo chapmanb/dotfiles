@@ -193,9 +193,21 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn("programs.brave = {", desktop)
         self.assertIn("extensions = builtins.attrNames browserExtensions.extensions;", desktop)
         extensions_spec = json.loads((ROOT / "config/chromium/extensions.json").read_text())
-        self.assertEqual(extensions_spec["extensions"].get("lodbfhdipoipcjmlebjbgmmgekckhpfb"), "Harper")
-        self.assertNotIn("oldceeleldhonbafppcapldpdifcinji", extensions_spec["extensions"])
-        self.assertEqual(extensions_spec["blocked"], {"oldceeleldhonbafppcapldpdifcinji": "LanguageTool"})
+        self.assertEqual(extensions_spec["extensions"], {
+            "aapbdbdomjkkjkaonfhkkikfgjllcleb": "Google Translate",
+            "bnjglocicdkmhmoohhfkfkbbkejdhdgc": "FlowCrypt: Encrypt Gmail with PGP",
+            "lodbfhdipoipcjmlebjbgmmgekckhpfb": "Harper",
+            "mphdppdgoagghpmmhodmfajjlloijnbd": "Pinboard Plus",
+            "nngceckbapebfimnlniiiahkandclblb": "Bitwarden Password Manager",
+        })
+        self.assertEqual(extensions_spec["blocked"], {
+            "dahenjhkoodjbpjheillcadbppiidmhp": "Google Scholar PDF Reader",
+            "eedlgdlajadkbbjoobobefphmfkcchfk": "Ecosia",
+            "egpjdkipkomnmjhjmdamaniclmdlobbo": "Firenvim",
+            "gphhapmejobijbbhgpjhcjognlahblep": "GNOME Shell integration",
+            "jpmkfafbacpgapdghgdpembnojdlgkdl": "AWS Extend Switch Roles",
+            "oldceeleldhonbafppcapldpdifcinji": "LanguageTool",
+        })
         self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
         self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
         self.assertIn("exec = ghostty;", desktop)

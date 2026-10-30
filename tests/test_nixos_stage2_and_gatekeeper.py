@@ -579,9 +579,21 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
         policy_paths = [self.system / path for path in gatekeeper.BROWSER_POLICY_CONFIGS]
         expected_policy = gatekeeper.browser_policy_content(ROOT)
         parsed_policy = json.loads(expected_policy)
-        self.assertIn("lodbfhdipoipcjmlebjbgmmgekckhpfb", parsed_policy["ExtensionInstallForcelist"])
-        self.assertNotIn("oldceeleldhonbafppcapldpdifcinji", parsed_policy["ExtensionInstallForcelist"])
-        self.assertEqual(parsed_policy["ExtensionInstallBlocklist"], ["oldceeleldhonbafppcapldpdifcinji"])
+        self.assertEqual(parsed_policy["ExtensionInstallForcelist"], [
+            "aapbdbdomjkkjkaonfhkkikfgjllcleb",
+            "bnjglocicdkmhmoohhfkfkbbkejdhdgc",
+            "lodbfhdipoipcjmlebjbgmmgekckhpfb",
+            "mphdppdgoagghpmmhodmfajjlloijnbd",
+            "nngceckbapebfimnlniiiahkandclblb",
+        ])
+        self.assertEqual(parsed_policy["ExtensionInstallBlocklist"], [
+            "dahenjhkoodjbpjheillcadbppiidmhp",
+            "eedlgdlajadkbbjoobobefphmfkcchfk",
+            "egpjdkipkomnmjhjmdamaniclmdlobbo",
+            "gphhapmejobijbbhgpjhcjognlahblep",
+            "jpmkfafbacpgapdghgdpembnojdlgkdl",
+            "oldceeleldhonbafppcapldpdifcinji",
+        ])
         code, output, errors = self.invoke("activate-host-bridge")
         self.assertEqual(code, 0, errors)
         writes = json.loads(output)["write"]
