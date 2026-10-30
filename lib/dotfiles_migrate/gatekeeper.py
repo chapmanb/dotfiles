@@ -89,6 +89,11 @@ RETIRED_LOCAL_PATTERNS = (
 GIT_VERSION = "1:2.25.1-1ubuntu3.14"
 BRIDGE_CONFIG = "etc/tmpfiles.d/nix-opengl-driver.conf"
 BRIDGE_CONTENT = "L+ /run/opengl-driver - - - - /home/bchapman/.local/state/nix-opengl-driver\n"
+BROWSER_EXTENSIONS_CONFIG = "config/chromium/extensions.json"
+BROWSER_POLICY_CONFIGS = (
+    "etc/brave/policies/managed/dotfiles-extensions.json",
+    "etc/opt/chrome/policies/managed/dotfiles-extensions.json",
+)
 SNAP_PIN = "Package: snapd\nPin: release *\nPin-Priority: -10\n"
 
 
@@ -271,18 +276,36 @@ def install_host_file(path, content, runner):
         runner.run(["sudo", "install", "-D", "-m", "0644", str(source), str(path)])
 
 
+def browser_policy_content(flake):
+    source = flake / BROWSER_EXTENSIONS_CONFIG
+    if not source.is_file():
+        source = Path(__file__).resolve().parents[2] / BROWSER_EXTENSIONS_CONFIG
+    spec = json.loads(source.read_text())
+    policy = {
+        "ExtensionInstallForcelist": sorted(spec["extensions"]),
+        "ExtensionInstallBlocklist": sorted(spec["blocked"]),
+    }
+    return json.dumps(policy, indent=2) + "\n"
+
+
 def activate_host_bridge(args, runner, execute):
     result = preflight_ubuntu(args, runner)
     config = args.system_root / BRIDGE_CONFIG
+    policy = browser_policy_content(args.flake)
+    writes = {
+        str(config): BRIDGE_CONTENT,
+        **{str(args.system_root / path): policy for path in BROWSER_POLICY_CONFIGS},
+    }
     commands = [
         ["sudo", "systemd-tmpfiles", "--create", str(config)],
         ["home-manager", "switch", "--flake", f"{flake_uri(args)}#bchapman@bchapman-ubnt"],
     ]
     if execute:
-        install_host_file(config, BRIDGE_CONTENT, runner)
+        for path, content in writes.items():
+            install_host_file(Path(path), content, runner)
         for command in commands:
             runner.run(command)
-    return {**result, "write": {str(config): BRIDGE_CONTENT}, "commands": commands}
+    return {**result, "write": writes, "commands": commands}
 
 
 def protected_package(name):

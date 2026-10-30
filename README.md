@@ -268,10 +268,15 @@ Never run the whole gatekeeper under sudo (Home Manager and home files must
 retain the user's identity).
 
 `activate-host-bridge` installs the systemd-tmpfiles rule linking
-`/run/opengl-driver` to `/home/bchapman/.local/state/nix-opengl-driver`, creates
-it immediately and switches standalone Home Manager as the current user.
-Home Manager supplies ABI-matching Nixpkgs Mesa, Ghostty GNOME autostart and
-Ctrl+Alt+T integration, and Brave browser registration. Native Ubuntu
+`/run/opengl-driver` to `/home/bchapman/.local/state/nix-opengl-driver`,
+installs managed browser extension policies from `config/chromium/extensions.json`
+into `/etc/brave/policies/managed/dotfiles-extensions.json` and
+`/etc/opt/chrome/policies/managed/dotfiles-extensions.json` (installing Harper
+and blocking retired LanguageTool alongside the shared extension set), creates
+the OpenGL link immediately and switches standalone Home Manager as the current
+user. Home Manager supplies ABI-matching Nixpkgs Mesa, `pkgs.unstable.harper`
+(`harper-ls`/`harper-cli`), Ghostty GNOME autostart and Ctrl+Alt+T integration,
+and Brave browser registration and user-space `External Extensions`. Native Ubuntu
 `/usr/bin/gnome-terminal` remains the fallback; no Nix GNOME Terminal client or
 per-binary nixGL wrapper is needed. Back up conflicting unmanaged config files
 before switching, and log out/in to validate desktop changes.

@@ -1,6 +1,8 @@
 { pkgs, ... }:
 
-{
+let
+  browserExtensions = builtins.fromJSON (builtins.readFile ../../config/chromium/extensions.json);
+in {
   imports = [ ./cisco-vpn.nix ./bind-mounts.nix ];
 
   networking.hostName = "bchapman-ubnt";
@@ -71,6 +73,14 @@
   };
   virtualisation.docker.enable = true;
   environment.systemPackages = with pkgs; [ brave google-chrome zoom-us ];
+
+  programs.chromium = {
+    enable = true;
+    extensions = builtins.attrNames browserExtensions.extensions;
+    extraOpts = {
+      ExtensionInstallBlocklist = builtins.attrNames browserExtensions.blocked;
+    };
+  };
 
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [

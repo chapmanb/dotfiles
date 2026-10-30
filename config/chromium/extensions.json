@@ -1,0 +1,17 @@
+{
+  "extensions": {
+    "aapbdbdomjkkjkaonfhkkikfgjllcleb": "Google Translate",
+    "bnjglocicdkmhmoohhfkfkbbkejdhdgc": "FlowCrypt: Encrypt Gmail with PGP",
+    "dahenjhkoodjbpjheillcadbppiidmhp": "Google Scholar PDF Reader",
+    "eedlgdlajadkbbjoobobefphmfkcchfk": "Ecosia",
+    "egpjdkipkomnmjhjmdamaniclmdlobbo": "Firenvim",
+    "gphhapmejobijbbhgpjhcjognlahblep": "GNOME Shell integration",
+    "jpmkfafbacpgapdghgdpembnojdlgkdl": "AWS Extend Switch Roles",
+    "lodbfhdipoipcjmlebjbgmmgekckhpfb": "Harper",
+    "mphdppdgoagghpmmhodmfajjlloijnbd": "Pinboard Plus",
+    "nngceckbapebfimnlniiiahkandclblb": "Bitwarden Password Manager"
+  },
+  "blocked": {
+    "oldceeleldhonbafppcapldpdifcinji": "LanguageTool"
+  }
+}

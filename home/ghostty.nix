@@ -4,9 +4,15 @@ let
   ghostty = "${pkgs.ghostty}/bin/ghostty";
   brave = "${pkgs.brave}/bin/brave";
   redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";
+  browserExtensions = builtins.fromJSON (builtins.readFile ../config/chromium/extensions.json);
 in {
   home.packages = [ pkgs.xdg-terminal-exec ];
   home.sessionVariables.TERMINAL = ghostty;
+
+  programs.brave = {
+    enable = true;
+    extensions = builtins.attrNames browserExtensions.extensions;
+  };
 
   dconf.settings = {
     "org/gnome/desktop/default-applications/terminal" = {

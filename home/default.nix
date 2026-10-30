@@ -37,7 +37,7 @@ in {
     (lib.setPrio 8 python312) (lib.setPrio 9 python311)
     keyringWithGar uv pixi bun deno pnpm
     brave libreoffice inkscape redshift
-    gh go-task glow lazygit gitu mdbook pandoc clj-kondo clojure-lsp
+    gh go-task glow lazygit gitu mdbook pandoc pkgs.unstable.harper clj-kondo clojure-lsp
     kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk pre-commit
     ffmpeg graphviz imagemagick qpdf sqlite ncdu parallel datamash tree fx jetbrains-mono
     bubblewrap gnupatch curl xdg-utils socat yt-dlp gitleaks semgrep osv-scanner

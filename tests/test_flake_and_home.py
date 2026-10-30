@@ -21,7 +21,8 @@ EXISTING_HOME_PACKAGES = {
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
     "pkgs.unstable.nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
     "brave", "libreoffice", "inkscape", "redshift",
-    "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "clj-kondo", "clojure-lsp",
+    "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "pkgs.unstable.harper",
+    "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
     "pre-commit", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
@@ -188,6 +189,13 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('ghostty = "${pkgs.ghostty}/bin/ghostty";', desktop)
         self.assertIn('brave = "${pkgs.brave}/bin/brave";', desktop)
         self.assertIn('redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";', desktop)
+        self.assertIn('browserExtensions = builtins.fromJSON (builtins.readFile ../config/chromium/extensions.json);', desktop)
+        self.assertIn("programs.brave = {", desktop)
+        self.assertIn("extensions = builtins.attrNames browserExtensions.extensions;", desktop)
+        extensions_spec = json.loads((ROOT / "config/chromium/extensions.json").read_text())
+        self.assertEqual(extensions_spec["extensions"].get("lodbfhdipoipcjmlebjbgmmgekckhpfb"), "Harper")
+        self.assertNotIn("oldceeleldhonbafppcapldpdifcinji", extensions_spec["extensions"])
+        self.assertEqual(extensions_spec["blocked"], {"oldceeleldhonbafppcapldpdifcinji": "LanguageTool"})
         self.assertIn("home.sessionVariables.TERMINAL = ghostty;", desktop)
         self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
         self.assertIn("exec = ghostty;", desktop)
@@ -495,6 +503,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIsNotNone(overlay)
         self.assertNotIn("zstd", overlay.group(1).split())
         self.assertNotIn("nodejs_24", overlay.group(1).split())
+        self.assertNotIn("harper", overlay.group(1).split())
         home_module = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home_module)
         self.assertIsNotNone(packages)
@@ -502,6 +511,8 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertNotIn("zstd", packages.group(1).split())
         self.assertIn("pkgs.unstable.nodejs_24", packages.group(1).split())
         self.assertNotIn("nodejs_24", packages.group(1).split())
+        self.assertIn("pkgs.unstable.harper", packages.group(1).split())
+        self.assertNotIn("harper", packages.group(1).split())
 
         with tempfile.TemporaryDirectory(prefix="test-shell-transition-") as temporary:
             home = Path(temporary)

@@ -148,6 +148,10 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             'options = "ctrl:nocaps";', "services.pipewire = {", "pulse.enable = true;",
             "virtualisation.docker.enable = true;",
             "[ brave google-chrome zoom-us ]",
+            "browserExtensions = builtins.fromJSON (builtins.readFile ../../config/chromium/extensions.json);",
+            "programs.chromium = {",
+            "extensions = builtins.attrNames browserExtensions.extensions;",
+            "ExtensionInstallBlocklist = builtins.attrNames browserExtensions.blocked;",
             "programs.nix-ld.enable = true;", "services.envfs.enable = true;",
             "stdenv.cc.cc zlib bzip2 xz openssl glib libuuid icu libffi",
             "security.pki.certificateFiles", "security.pki.caCertificateBlacklist",
@@ -572,15 +576,27 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
             "intel-microcode", "oem-sutton.newell-meta", "oem-sutton.newell-aekerley-meta",
         })
         config = self.system / gatekeeper.BRIDGE_CONFIG
+        policy_paths = [self.system / path for path in gatekeeper.BROWSER_POLICY_CONFIGS]
+        expected_policy = gatekeeper.browser_policy_content(ROOT)
+        parsed_policy = json.loads(expected_policy)
+        self.assertIn("lodbfhdipoipcjmlebjbgmmgekckhpfb", parsed_policy["ExtensionInstallForcelist"])
+        self.assertNotIn("oldceeleldhonbafppcapldpdifcinji", parsed_policy["ExtensionInstallForcelist"])
+        self.assertEqual(parsed_policy["ExtensionInstallBlocklist"], ["oldceeleldhonbafppcapldpdifcinji"])
         code, output, errors = self.invoke("activate-host-bridge")
         self.assertEqual(code, 0, errors)
-        self.assertEqual(json.loads(output)["write"][str(config)], gatekeeper.BRIDGE_CONTENT)
+        writes = json.loads(output)["write"]
+        self.assertEqual(writes[str(config)], gatekeeper.BRIDGE_CONTENT)
+        for policy_path in policy_paths:
+            self.assertEqual(writes[str(policy_path)], expected_policy)
+            self.assertFalse(policy_path.exists())
         self.assertFalse(config.exists())
         self.assert_no_host_mutations()
         code, _, errors = self.invoke("activate-host-bridge", "--execute", "--confirm")
         self.assertEqual(code, 0, errors)
         self.assertEqual(config.read_text(),
                          "L+ /run/opengl-driver - - - - /home/bchapman/.local/state/nix-opengl-driver\n")
+        for policy_path in policy_paths:
+            self.assertEqual(policy_path.read_text(), expected_policy)
         tmpfiles = ["sudo", "systemd-tmpfiles", "--create", str(config)]
         switch = ["home-manager", "switch", "--flake", f"git+{ROOT.as_uri()}#bchapman@bchapman-ubnt"]
         self.assertLess(self.runner.calls.index(tmpfiles), self.runner.calls.index(switch))
