@@ -291,7 +291,7 @@ class TestNixosStage2AndGatekeeper(unittest.TestCase):
 
     def test_preflight_ubuntu_verifies_git_flake_source_corp_services_and_nix_binaries(self):
         self.assertEqual(set(gatekeeper.MIGRATED_BINARIES), {
-            "ghostty", "brave", "libreoffice", "inkscape", "redshift", "redshift-gtk",
+            "ghostty", "brave", "libreoffice", "inkscape",
             "gcloud", "gh", "task", "glow", "lazygit", "gitu", "mdbook", "pandoc",
             "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
             "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",

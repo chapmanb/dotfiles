@@ -27,7 +27,7 @@ CORPORATE_SERVICES = (
     "connectwisecontrol-a8194903625f6c0d",
 )
 MIGRATED_BINARIES = (
-    "ghostty", "brave", "libreoffice", "inkscape", "redshift", "redshift-gtk",
+    "ghostty", "brave", "libreoffice", "inkscape",
     "gcloud", "gh", "task", "glow", "lazygit", "gitu", "mdbook", "pandoc",
     "clj-kondo", "clojure-lsp", "kubectl", "helm", "k9s", "argo", "terraform",
     "terraform-docs", "pre-commit", "ffmpeg", "dot", "magick", "qpdf", "sqlite3",

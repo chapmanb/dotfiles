@@ -3,7 +3,6 @@
 let
   ghostty = "${pkgs.ghostty}/bin/ghostty";
   brave = "${pkgs.brave}/bin/brave";
-  redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";
   browserExtensions = builtins.fromJSON (builtins.readFile ../config/chromium/extensions.json);
 in {
   home.packages = [ pkgs.xdg-terminal-exec ];
@@ -26,6 +25,12 @@ in {
       name = "Ghostty";
       command = ghostty;
       binding = "<Primary><Alt>t";
+    };
+    "org/gnome/settings-daemon/plugins/color" = {
+      night-light-enabled = true;
+      night-light-schedule-automatic = true;
+      night-light-last-coordinates = lib.hm.gvariant.mkTuple [ 42.36 (-71.06) ];
+      night-light-temperature = lib.hm.gvariant.mkUint32 4500;
     };
     "org/gnome/shell" = {
       disable-user-extensions = false;
@@ -100,15 +105,6 @@ in {
 
     "xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\n";
 
-    "redshift/redshift.conf".text = ''
-      [redshift]
-      location-provider=manual
-
-      [manual]
-      lat=42.36
-      lon=-71.06
-    '';
-
     # Replace the unmanaged legacy entry so both terminals cannot autostart.
     "autostart/gnome-terminal.desktop" = {
       force = true;
@@ -139,21 +135,6 @@ in {
         TryExec=${brave}
         Terminal=false
         OnlyShowIn=GNOME;
-        X-GNOME-Autostart-enabled=true
-      '';
-    };
-    "autostart/redshift-gtk.desktop" = {
-      force = true;
-      text = ''
-        [Desktop Entry]
-        Type=Application
-        Name=Redshift
-        Exec=${redshiftGtk}
-        TryExec=${redshiftGtk}
-        Icon=redshift
-        Terminal=false
-        OnlyShowIn=GNOME;
-        Hidden=false
         X-GNOME-Autostart-enabled=true
       '';
     };

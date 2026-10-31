@@ -36,7 +36,7 @@ in {
     (lib.setPrio 6 python314) (lib.setPrio 7 python313)
     (lib.setPrio 8 python312) (lib.setPrio 9 python311)
     keyringWithGar uv pixi bun deno pnpm
-    brave libreoffice inkscape redshift
+    brave libreoffice inkscape
     gh go-task glow lazygit gitu mdbook pandoc pkgs.unstable.harper clj-kondo clojure-lsp
     kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk pre-commit
     ffmpeg graphviz imagemagick qpdf sqlite ncdu parallel datamash tree fx jetbrains-mono

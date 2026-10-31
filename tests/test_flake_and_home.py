@@ -20,7 +20,7 @@ EXISTING_HOME_PACKAGES = {
     "neovim", "ghostty", "tmux", "awscli2", "snowflake-cli", "babashka", "clojure", "leiningen",
     "ruff", "pyright", "tree-sitter", "xclip", "wl-clipboard", "pass", "gnupg",
     "pkgs.unstable.nodejs_24", "python315", "uv", "pixi", "bun", "deno", "pnpm",
-    "brave", "libreoffice", "inkscape", "redshift",
+    "brave", "libreoffice", "inkscape",
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "pkgs.unstable.harper",
     "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
@@ -185,10 +185,11 @@ class TestFlakeAndHome(unittest.TestCase):
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
         self.assertIsNotNone(packages)
         self.assertIn("brave", packages.group(1).split())
+        self.assertNotIn("redshift", packages.group(1).split())
         self.assertNotIn("excludePackages", (ROOT / "hosts/bchapman-ubnt/default.nix").read_text())
         self.assertIn('ghostty = "${pkgs.ghostty}/bin/ghostty";', desktop)
         self.assertIn('brave = "${pkgs.brave}/bin/brave";', desktop)
-        self.assertIn('redshiftGtk = "${pkgs.redshift}/bin/redshift-gtk";', desktop)
+        self.assertNotIn("redshift", desktop)
         self.assertIn('browserExtensions = builtins.fromJSON (builtins.readFile ../config/chromium/extensions.json);', desktop)
         self.assertIn("programs.brave = {", desktop)
         self.assertIn("extensions = builtins.attrNames browserExtensions.extensions;", desktop)
@@ -218,6 +219,11 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty"', desktop)
         self.assertIn('binding = "<Primary><Alt>t";', desktop)
         self.assertIn("command = ghostty;", desktop)
+        self.assertIn('"org/gnome/settings-daemon/plugins/color" = {', desktop)
+        self.assertIn("night-light-enabled = true;", desktop)
+        self.assertIn("night-light-schedule-automatic = true;", desktop)
+        self.assertIn("night-light-last-coordinates = lib.hm.gvariant.mkTuple [ 42.36 (-71.06) ];", desktop)
+        self.assertIn("night-light-temperature = lib.hm.gvariant.mkUint32 4500;", desktop)
         self.assertIn('"org/gnome/shell" = {', desktop)
         self.assertIn("disable-user-extensions = false;", desktop)
         self.assertIn('"auto-move-windows@gnome-shell-extensions.gcampax.github.com"', desktop)
@@ -228,14 +234,11 @@ class TestFlakeAndHome(unittest.TestCase):
             '"com.mitchellh.ghostty.desktop:3"',
         ):
             self.assertIn(placement, desktop)
-        self.assertIn('"redshift/redshift.conf".text =', desktop)
-        self.assertIn("location-provider=manual", desktop)
         legacy, login = desktop.split('"autostart/com.mitchellh.ghostty.desktop".text =', 1)
         legacy = legacy.split('"autostart/gnome-terminal.desktop" =', 1)[1]
         self.assertIn("force = true;", legacy)
         self.assertIn("Hidden=true", legacy)
-        ghostty_login, brave_and_redshift = login.split('"autostart/brave-browser.desktop" =', 1)
-        brave_login, redshift_login = brave_and_redshift.split('"autostart/redshift-gtk.desktop" =', 1)
+        ghostty_login, brave_login = login.split('"autostart/brave-browser.desktop" =', 1)
         for line in ("Type=Application", "Exec=${ghostty}", "TryExec=${ghostty}",
                      "Terminal=false", "OnlyShowIn=GNOME;", "X-GNOME-Autostart-enabled=true"):
             self.assertIn(line, ghostty_login)
@@ -245,11 +248,6 @@ class TestFlakeAndHome(unittest.TestCase):
                      "TryExec=${brave}", "Terminal=false", "OnlyShowIn=GNOME;",
                      "X-GNOME-Autostart-enabled=true"):
             self.assertIn(line, brave_login)
-        self.assertIn("force = true;", redshift_login)
-        for line in ("Type=Application", "Name=Redshift", "Exec=${redshiftGtk}",
-                     "TryExec=${redshiftGtk}", "Icon=redshift", "Terminal=false",
-                     "OnlyShowIn=GNOME;", "Hidden=false", "X-GNOME-Autostart-enabled=true"):
-            self.assertIn(line, redshift_login)
         self.assertNotIn("/usr/bin/gnome-terminal", desktop)
         self.assertNotIn("/usr/bin/brave-browser", desktop)
 
