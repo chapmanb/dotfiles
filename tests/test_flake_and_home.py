@@ -213,7 +213,10 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('"org/gnome/desktop/default-applications/terminal"', desktop)
         self.assertIn("exec = ghostty;", desktop)
         self.assertIn('exec-arg = "-e";', desktop)
-        self.assertIn('"xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\\n";', desktop)
+        self.assertIn('"xdg-terminals.list" = {', desktop)
+        terminals = desktop.split('"xdg-terminals.list" = {', 1)[1].split("};", 1)[0]
+        self.assertIn("force = true;", terminals)
+        self.assertIn('text = "com.mitchellh.ghostty.desktop\\n";', terminals)
         self.assertIn("custom-keybindings = lib.mkAfter [", desktop)
         self.assertIn('"/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty/"', desktop)
         self.assertIn('"org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/ghostty"', desktop)

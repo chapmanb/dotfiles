@@ -103,7 +103,10 @@ in {
       font-size = 11
     '';
 
-    "xdg-terminals.list".text = "com.mitchellh.ghostty.desktop\n";
+    "xdg-terminals.list" = {
+      force = true;
+      text = "com.mitchellh.ghostty.desktop\n";
+    };
 
     # Replace the unmanaged legacy entry so both terminals cannot autostart.
     "autostart/gnome-terminal.desktop" = {
