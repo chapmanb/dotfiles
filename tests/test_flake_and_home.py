@@ -354,6 +354,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertIn('programs.home-manager.enable = true;', home)
         service, timer = home.split("systemd.user.timers.dotfiles-daily-backup =", 1)
         self.assertIn("systemd.user.services.dotfiles-daily-backup =", service)
+        self.assertIn('X-SwitchMethod = "keep-old";', service)
         self.assertIn('Type = "oneshot";', service)
         self.assertIn('ExecStart = "/home/bchapman/.dotfiles/bin/daily-backup run";', service)
         self.assertIn('ExecStartPost = "/home/bchapman/.dotfiles/bin/nightly-maintenance";', service)

@@ -80,6 +80,9 @@ in {
       Description = "Daily dotfiles snapshot backup and browsable sync";
       Wants = [ "network-online.target" ];
       After = [ "network-online.target" ];
+      # ExecStartPost invokes home-manager switch via system-update; prevent
+      # sd-switch from stopping this oneshot unit while it is still activating.
+      X-SwitchMethod = "keep-old";
     };
     Service = {
       Type = "oneshot";
