@@ -40,6 +40,39 @@ Eastern user timer. Inspect it with
 `journalctl --user -u dotfiles-daily-backup.service`.
 Passwords, credentials and Cisco assets must stay outside this repository.
 
+## Host recovery in Snapshot Backup
+
+Install both root helpers with `bin/daily-backup install-root-helper` (preview),
+then `bin/daily-backup install-root-helper --execute --confirm` in an attended
+host terminal. The root-owned, zero-argument `/usr/local/sbin/dotfiles-backup-stage`
+runs via `sudo -n`; Restic and rclone remain unprivileged.
+
+On Ubuntu, `stage-corp-stack` and `run` refresh the private
+`~/.local/state/daily-backup/corporate-access-stack/` tree. It contains the
+Corporate Recovery Bundle (CA trust, Cisco certificates/client assets,
+ConnectWise launch parameters and readable Centrify configuration), Host
+Integration Overlay (AppArmor, shell, sysctl, OpenGL tmpfiles bridge, browser
+policies, APT/keyrings, boot/storage/auth/SSH and systemd configuration), and
+`host-inventory/` package selections/versions, manual/held marks, service states,
+storage/mount JSON and Nix profile symlink references.
+
+The Root Backup Helper creates `protected-host-config.tar.gz` and
+`protected-host-config.SHA256SUMS`, both mode `0600`, containing protected
+NetworkManager profiles, dereferenced 802.1X certificates/keys and sudoers policy.
+Preserve the nonempty canonical VPN installer at
+`~/.vpn/installers/cisco-secure-client-linux64-5.1.18.314-predeploy-deb-k9.tgz`
+(file mode `0600`, installers directory `0700`); it is backed up through `~/.vpn`.
+
+Staging fails closed on missing required recovery assets, inventory failures,
+unavailable non-interactive sudo, invalid installer permissions, or checksum
+mismatch, retaining the previous staging tree. `bin/daily-backup verify` checks
+staged recovery integrity and requires the staging path alongside all Ginkgo
+roots in the latest Restic snapshot. Failures revoke Snapshot Backup verification
+and exit nonzero. Minimal/declarative-only roots without `etc/os-release` retain
+partial/empty staging behavior. Do not retire upgrade recovery scratch copies
+until a fresh backup, verification and targeted restore of the protected archive
+and inventory have succeeded on the live host.
+
 ## Guarded system updates
 
 The stable inputs track `nixos-26.05` and Home Manager `release-26.05`;

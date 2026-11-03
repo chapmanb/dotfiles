@@ -16,7 +16,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
-from dotfiles_migrate import system_update
+from dotfiles_migrate import daily_backup, system_update
 from dotfiles_migrate.daily_backup import BROWSABLE_REMOTE, BROWSABLE_ROOTS, RESTIC_REPOSITORY
 from dotfiles_migrate.gatekeeper import CLIENT_ASSETS, MIGRATED_BINARIES
 
@@ -52,6 +52,8 @@ class OfflineRunner:
         self.daemon_failed = False
         self.sudo_failed = False
         self.visudo_failed = False
+        self.visudo_fail_helper = ""
+        self.validated_rules = []
         self.post_upgrade_unhealthy = False
         self.untrusted_daemon = False
         self.root_output = None
@@ -61,10 +63,14 @@ class OfflineRunner:
         self.calls.append(args)
         output = ""
         if args[:2] == ["sudo", "visudo"]:
-            if self.visudo_failed:
+            rule = Path(args[-1]).read_text()
+            if self.visudo_failed or (self.visudo_fail_helper and self.visudo_fail_helper in rule):
                 raise subprocess.CalledProcessError(1, args)
-            if "NOPASSWD: /usr/local/sbin/dotfiles-system-update" not in Path(args[-1]).read_text():
+            if rule not in (
+                    "bchapman ALL=(root) NOPASSWD: /usr/local/sbin/dotfiles-system-update\n",
+                    "bchapman ALL=(root) NOPASSWD: /usr/local/sbin/dotfiles-backup-stage\n"):
                 raise AssertionError("Unexpected sudoers content")
+            self.validated_rules.append(rule)
         elif args[:2] == ["sudo", "install"]:
             destination = Path(args[-1])
             self.assert_sandbox(destination)
@@ -251,6 +257,8 @@ class TestSystemUpdate(unittest.TestCase):
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
             code = system_update.main(argv, runner=self.runner,
                                       advisory_fetcher=fetcher if fetcher is not None else self.fetch)
+        if command == "install-root-helper":
+            return code, json.loads(output.getvalue())
         report_path = (self.system / "var/lib/system-update/report.json" if command == "run-root"
                        else self.home / ".local/state/system-update/report.json")
         report = json.loads(report_path.read_text())
@@ -550,8 +558,8 @@ class TestSystemUpdate(unittest.TestCase):
         self.assertEqual(sudoers.read_text(),
                          "bchapman ALL=(root) NOPASSWD: /usr/local/sbin/dotfiles-system-update\n")
         installs = [call for call in self.runner.calls if call[:2] == ["sudo", "install"] and "-T" in call]
-        self.assertEqual([call[call.index("-o") + 1] for call in installs], ["root", "root"])
-        self.assertEqual([call[call.index("-g") + 1] for call in installs], ["root", "root"])
+        self.assertEqual([call[call.index("-o") + 1] for call in installs], ["root"] * 4)
+        self.assertEqual([call[call.index("-g") + 1] for call in installs], ["root"] * 4)
         validation = next(i for i, call in enumerate(self.runner.calls) if call[:3] == ["sudo", "visudo", "-cf"])
         placement = next(i for i, call in enumerate(self.runner.calls) if call in installs)
         self.assertLess(validation, placement)
@@ -602,6 +610,86 @@ class TestSystemUpdate(unittest.TestCase):
             self.assertEqual(report["tracks"][name]["status"], "DEFERRED_ROOT_HELPER_NOT_INSTALLED")
         self.assertEqual(report["tracks"]["store_retention"]["system_gc"], "DEFERRED_ROOT_HELPER_NOT_INSTALLED")
         self.assertFalse(any(call[0] == "sudo" for call in self.runner.calls))
+
+    def test_install_root_helper_installs_both_system_update_and_backup_stage_helpers(self):
+        paths = {
+            "usr/local/sbin/dotfiles-system-update": 0o755,
+            "usr/local/sbin/dotfiles-backup-stage": 0o755,
+            "etc/sudoers.d/dotfiles-system-update": 0o440,
+            "etc/sudoers.d/dotfiles-backup-stage": 0o440,
+        }
+        for cli in ("system-update", "daily-backup"):
+            with self.subTest(cli=cli):
+                for relative in paths:
+                    (self.system / relative).unlink(missing_ok=True)
+                self.runner.calls.clear()
+                self.runner.validated_rules.clear()
+
+                def invoke(*flags):
+                    if cli == "system-update":
+                        return self.invoke(*flags, command="install-root-helper")
+                    stdout, stderr = io.StringIO(), io.StringIO()
+                    with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                        code = daily_backup.main([
+                            "install-root-helper", "--home", str(self.home),
+                            "--system-root", str(self.system), *flags], runner=self.runner)
+                    return code, json.loads(stdout.getvalue()) if code == 0 else stderr.getvalue()
+
+                def stat_sig(path):
+                    info = path.lstat()
+                    return (info.st_mode, info.st_size, info.st_mtime_ns, info.st_uid, info.st_gid)
+
+                for flags in ((), ("--execute",), ("--confirm",),
+                              ("--execute", "--confirm", "--dry-run")):
+                    before = {str(path): stat_sig(path) for path in self.root.rglob("*")}
+                    code, report = invoke(*flags)
+                    self.assertEqual(code, 0, report)
+                    self.assertEqual(report["installation"]["status"], "DRY_RUN")
+                    self.assertEqual(before, {str(path): stat_sig(path) for path in self.root.rglob("*")})
+                    self.assertFalse(self.runner.calls)
+                # A failure in the second validation must not place even the first helper.
+                self.runner.visudo_fail_helper = "dotfiles-backup-stage"
+                code, report = invoke("--execute", "--confirm")
+                self.assertEqual(code, 1, report)
+                self.assertFalse(any(call[:2] == ["sudo", "install"] for call in self.runner.calls))
+                self.assertFalse(any((self.system / relative).exists() for relative in paths))
+                self.runner.visudo_fail_helper = ""
+                self.runner.calls.clear()
+                self.runner.validated_rules.clear()
+                with patch.object(system_update, "ROOT_UID", os.getuid()):
+                    code, report = invoke("--execute", "--confirm")
+                self.assertEqual(code, 0, report)
+                self.assertEqual(report["installation"]["status"], "INSTALLED")
+                self.assertEqual(len(self.runner.validated_rules), 2)
+                validations = [i for i, call in enumerate(self.runner.calls)
+                               if call[:3] == ["sudo", "visudo", "-cf"]]
+                installs = [call for call in self.runner.calls if call[:2] == ["sudo", "install"]]
+                self.assertLess(max(validations), self.runner.calls.index(installs[0]))
+                placements = [call for call in installs if "-T" in call]
+                self.assertEqual(len(placements), 4)
+                for call in placements:
+                    self.assertEqual(call[call.index("-o") + 1], "root")
+                    self.assertEqual(call[call.index("-g") + 1], "root")
+                for relative, mode in paths.items():
+                    path = self.system / relative
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), mode)
+                    if relative.startswith("etc/"):
+                        helper = "/usr/local/sbin/" + path.name
+                        self.assertEqual(path.read_text(),
+                                         f"bchapman ALL=(root) NOPASSWD: {helper}\n")
+                    else:
+                        self.assertTrue(path.read_bytes().startswith(b"#!/usr/bin/python3 -I\n"))
+                        with zipfile.ZipFile(path) as archive:
+                            entrypoint = archive.read("__main__.py").decode()
+                            self.assertIn("os.environ.clear()", entrypoint)
+                            self.assertNotIn(str(self.home), entrypoint)
+                            self.assertIn("dotfiles_migrate/daily_backup.py", archive.namelist())
+                            if path.name == "dotfiles-backup-stage":
+                                self.assertIn('"--system-root", "/"', entrypoint)
+                        result = subprocess.run(["/usr/bin/python3", "-I", str(path), "--help"],
+                                                capture_output=True, text=True)
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn("accepts no arguments", result.stderr)
 
     def test_root_daemon_monotonic_guard_apt_zero_removal_and_system_gc(self):
         self.install_fixture_helper()

@@ -39,6 +39,8 @@ OSV_REGISTRIES = {
 ROOT_UID = 0
 ROOT_HELPER = "usr/local/sbin/dotfiles-system-update"
 SUDOERS = "etc/sudoers.d/dotfiles-system-update"
+BACKUP_HELPER = "usr/local/sbin/dotfiles-backup-stage"
+BACKUP_SUDOERS = "etc/sudoers.d/dotfiles-backup-stage"
 SYSTEM_PROFILE = "/nix/var/nix/profiles/default"
 ROOT_STATE = "var/lib/system-update"
 ROOT_PATH = "/usr/sbin:/usr/bin:/sbin:/bin:/nix/var/nix/profiles/default/bin"
@@ -335,9 +337,29 @@ if len(sys.argv) != 1:
 os.environ.clear()
 os.environ.update(PATH="''' + ROOT_PATH + '''", HOME="/root",
                   NIX_CONFIG="experimental-features = nix-command flakes")
-from dotfiles_migrate.system_update import main
+from pathlib import Path
+from dotfiles_migrate.system_update import main, require_root_owned, ROOT_HELPER, SUDOERS
+for relative in (ROOT_HELPER, SUDOERS):
+    require_root_owned(Path("/") / relative)
 sys.exit(main(["run-root", "--execute", "--confirm", "--allow-inactive-drivestrike",
                "--home", "/home/bchapman", "--state-dir", "/var/lib/system-update"]))
+'''
+
+
+def backup_helper_entrypoint():
+    return '''import os
+import sys
+if len(sys.argv) != 1:
+    sys.exit("dotfiles-backup-stage accepts no arguments")
+os.environ.clear()
+os.environ.update(PATH="''' + ROOT_PATH + '''", HOME="/root")
+from pathlib import Path
+from dotfiles_migrate.system_update import require_root_owned, BACKUP_HELPER, BACKUP_SUDOERS
+for relative in (BACKUP_HELPER, BACKUP_SUDOERS):
+    require_root_owned(Path("/") / relative)
+from dotfiles_migrate.daily_backup import main
+sys.exit(main(["stage-protected", "--home", "/home/bchapman",
+               "--state-dir", "/home/bchapman/.local/state/daily-backup", "--system-root", "/"]))
 '''
 
 
@@ -347,32 +369,43 @@ def install_root_helper(args, runner, report, execute):
                               "sudoers": str(sudoers), "sudoers_mode": "0440",
                               "owner": "root:root", "status": "DRY_RUN",
                               "sudoers_rule": "bchapman ALL=(root) NOPASSWD: /usr/local/sbin/dotfiles-system-update",
+                              "backup_helper": str(args.system_root / BACKUP_HELPER),
+                              "backup_sudoers": str(args.system_root / BACKUP_SUDOERS),
                               "validation": "sudo visudo -cf <staged-sudoers> before placement"}
     if not execute:
         return
     # Explicitly privileged one-time installation; no passwordless rule references
     # the checkout. The archive contains a snapshot of the reviewed Python code.
     with tempfile.TemporaryDirectory(prefix="system-update-install-") as temporary:
-        archive = Path(temporary) / "helper"
-        archive.write_bytes(b"#!/usr/bin/python3 -I\n")
-        with zipfile.ZipFile(archive, "a") as bundle:
-            bundle.writestr("__main__.py", helper_entrypoint())
-            for source in Path(__file__).parent.glob("*.py"):
-                bundle.write(source, "dotfiles_migrate/" + source.name)
-        rule = Path(temporary) / "sudoers"
-        rule.write_text("bchapman ALL=(root) NOPASSWD: /usr/local/sbin/dotfiles-system-update\n")
-        rule.chmod(0o600)
-        runner.run(["sudo", "visudo", "-cf", str(rule)])
-        for destination in (helper, sudoers, args.system_root / ROOT_STATE / "report.json"):
+        placements = []
+        for name, helper_path, rule_path, entrypoint in (
+                ("update", ROOT_HELPER, SUDOERS, helper_entrypoint()),
+                ("backup", BACKUP_HELPER, BACKUP_SUDOERS, backup_helper_entrypoint())):
+            archive = Path(temporary) / (name + ".pyz")
+            archive.write_bytes(b"#!/usr/bin/python3 -I\n")
+            with zipfile.ZipFile(archive, "a") as bundle:
+                bundle.writestr("__main__.py", entrypoint)
+                for source in Path(__file__).parent.glob("*.py"):
+                    bundle.write(source, "dotfiles_migrate/" + source.name)
+            rule = Path(temporary) / (name + ".sudoers")
+            rule.write_text(f"bchapman ALL=(root) NOPASSWD: /{helper_path}\n")
+            rule.chmod(0o600)
+            runner.run(["sudo", "visudo", "-cf", str(rule)])
+            placements.extend(((archive, args.system_root / helper_path, "0755"),
+                               (rule, args.system_root / rule_path, "0440")))
+        destinations = [destination for _, destination, _ in placements]
+        destinations.append(args.system_root / ROOT_STATE / "report.json")
+        for destination in destinations:
             ancestor = destination.parent
             while not ancestor.exists():
                 ancestor = ancestor.parent
             require_root_owned(ancestor, args.system_root)
             if destination.exists() or destination.is_symlink():
                 require_root_owned(destination, args.system_root)
+        for parent in dict.fromkeys(destination.parent for destination in destinations):
             runner.run(["sudo", "install", "-d", "-o", "root", "-g", "root", "-m", "0755",
-                        str(destination.parent)])
-        for source, destination, mode in ((archive, helper, "0755"), (rule, sudoers, "0440")):
+                        str(parent)])
+        for source, destination, mode in placements:
             runner.run(["sudo", "install", "-T", "-o", "root", "-g", "root", "-m", mode,
                         str(source), str(destination)])
     report["installation"]["status"] = "INSTALLED"
@@ -601,6 +634,16 @@ def main(argv=None, runner=None, advisory_fetcher=None):
     execute = args.command in ("run", "run-root", "install-root-helper") and args.execute and args.confirm and not args.dry_run
     runner = runner if runner is not None else CommandRunner()
     advisory_fetcher = advisory_fetcher if advisory_fetcher is not None else fetch_advisories
+    if args.command == "install-root-helper":
+        report = {"status": "DRY_RUN"}
+        try:
+            install_root_helper(args, runner, report, execute)
+        except (GateError, OSError, subprocess.CalledProcessError) as error:
+            report.update(status="FAILED", error=str(error) if isinstance(error, GateError)
+                          else type(error).__name__)
+            print(f"system-update: {report['error']}", file=sys.stderr)
+        print(json.dumps(report, indent=2))
+        return 1 if report["status"] == "FAILED" else 0
     track = {"status": "DRY_RUN", "stable_updated": False, "unstable_updated": False,
              "actionable_advisories": [], "unpatched_advisories": [],
              "stable_branch_upgrade_available": None}
@@ -625,9 +668,7 @@ def main(argv=None, runner=None, advisory_fetcher=None):
             # Refuse mutations if their audit report cannot be persisted.
             write_private(args.state_dir / "report.json", json.dumps(report, indent=2) + "\n")
         require_update_gates(args, runner, report)
-        if args.command == "install-root-helper":
-            install_root_helper(args, runner, report, execute)
-        elif args.command == "run-root":
+        if args.command == "run-root":
             result = run_root_tracks(args, runner, advisory_fetcher, report, execute)
         else:
             result = run_user_tracks(args, runner, advisory_fetcher, report, execute)

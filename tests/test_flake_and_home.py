@@ -317,6 +317,17 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertNotIn("xdg.mime.enable", nixos)
         self.assertNotIn("xdg.mime.enable", (ROOT / "home/default.nix").read_text())
 
+    def test_readme_documents_root_backup_stage_helper_and_host_recovery(self):
+        readme = (ROOT / "README.md").read_text()
+        for required in (
+            "/usr/local/sbin/dotfiles-backup-stage", "protected-host-config.tar.gz",
+            "protected-host-config.SHA256SUMS", "host-inventory/",
+            "~/.vpn/installers/cisco-secure-client-linux64-5.1.18.314-predeploy-deb-k9.tgz",
+            "install-root-helper --execute --confirm", "sudo -n", "0600",
+        ):
+            with self.subTest(required=required):
+                self.assertIn(required, readme)
+
     def test_home_manager_symlinks_packages_ca_vars_and_backup_timer(self):
         home = (ROOT / "home/default.nix").read_text()
         self.assertIn('dotfiles = "${config.home.homeDirectory}/.dotfiles";', home)

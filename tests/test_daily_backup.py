@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import errno
 import fnmatch
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -18,6 +20,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "lib"))
 
 from dotfiles_migrate.daily_backup import main
+from dotfiles_migrate import system_update
 
 
 # Independent expectations: policy changes must not silently change acceptance.
@@ -33,6 +36,8 @@ SNAPSHOT_PATHS = (
     "todo.txt", "notes.txt", ".spacemacs.env", ".agents", ".claude",
     ".claude.json", ".codex", ".pi/agent", ".gemini", ".config/herdr", ".config/nvim",
     ".config/msmtp", ".config/gspread", ".config/rclone", ".config/autostart",
+    ".local/bin", ".config/monitors.xml", ".config/dconf", ".config/gh",
+    ".config/glab-cli", ".config/gcloud", ".docker/config.json", ".local/share/keyrings",
 )
 ARTIFACTS = (
     ".venv", "venv", ".pixi", "node_modules", "target", "__pycache__", ".mypy_cache",
@@ -61,12 +66,47 @@ class OfflineRunner:
         self.fail_pass = False
         self.fail_listing = False
         self.initialized = False
+        self.protected_stage = None
+        self.fail_sudo = False
+        self.corrupt_digest = False
+        self.fail_inventory = None
+        self.inventory_outputs = {
+            ("dpkg-query", "-W", "-f=${binary:Package}\\t${Version}\\t${Status}\\n"):
+                "libxml2\t1.0\tinstall ok installed\n",
+            ("dpkg", "--get-selections"): "libxml2\tinstall\n",
+            ("apt-mark", "showmanual"): "libxml2\nlibwebkit2gtk-4.0-37\n",
+            ("apt-mark", "showhold"): "",
+            ("systemctl", "list-unit-files", "--type=service", "--no-pager"): "vpnagentd.service enabled\n",
+            ("lsblk", "--json", "--output", "NAME,TYPE,FSTYPE,UUID,PARTUUID,SIZE,MOUNTPOINT"):
+                '{"blockdevices": []}\n',
+            ("findmnt", "--json", "--output", "TARGET,SOURCE,FSTYPE"): '{"filesystems": []}\n',
+        }
 
     def run(self, args):
         args = list(map(str, args))
         self.calls.append(args)
         output = ""
-        if args[0] == "pass":
+        if args == ["sudo", "-n", "/usr/local/sbin/dotfiles-backup-stage"]:
+            if self.fail_sudo:
+                raise subprocess.CalledProcessError(1, args, stderr="private sudo failure")
+            if self.protected_stage is None:
+                raise AssertionError("Unexpected root backup helper invocation")
+            archive = self.protected_stage / "protected-host-config.tar.gz"
+            with tarfile.open(archive, "w:gz") as bundle:
+                data = b"private host configuration"
+                member = tarfile.TarInfo("etc/NetworkManager/NetworkManager.conf")
+                member.size = len(data)
+                bundle.addfile(member, io.BytesIO(data))
+            archive.chmod(0o600)
+            digest = "0" * 64 if self.corrupt_digest else hashlib.sha256(archive.read_bytes()).hexdigest()
+            manifest = self.protected_stage / "protected-host-config.SHA256SUMS"
+            manifest.write_text(f"{digest}  protected-host-config.tar.gz\n# source: etc/NetworkManager/NetworkManager.conf\n")
+            manifest.chmod(0o600)
+        elif tuple(args) in self.inventory_outputs:
+            if args[0] == self.fail_inventory:
+                raise subprocess.CalledProcessError(1, args)
+            output = self.inventory_outputs[tuple(args)]
+        elif args[0] == "pass":
             if self.fail_pass:
                 raise subprocess.CalledProcessError(1, args, stderr="private pass failure")
             if args != ["pass", "show", "backup/restic-gdrive"]:
@@ -185,7 +225,9 @@ class OfflineRunner:
 
 class TestDailyBackup(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix="test-daily-backup-")
+        scratch = Path(__file__).resolve().parents[1] / "tmp"
+        scratch.mkdir(exist_ok=True)
+        self.temporary = tempfile.TemporaryDirectory(prefix="test-daily-backup-", dir=scratch)
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         self.home = self.root / "home"
@@ -236,6 +278,431 @@ class TestDailyBackup(unittest.TestCase):
 
     def rclone_calls(self, operation):
         return [call for call in self.runner.calls if call[0] == "rclone" and call[3] == operation]
+
+    def test_stage_protected_creates_verified_archive_and_enforces_ownership_invariants(self):
+        self.state.mkdir(mode=0o700)
+        helper = self.file(self.system / "usr/local/sbin/dotfiles-backup-stage")
+        rule = self.file(self.system / "etc/sudoers.d/dotfiles-backup-stage")
+        helper.chmod(0o755)
+        rule.chmod(0o440)
+        contents = {
+            "etc/NetworkManager/NetworkManager.conf": "[main]\nplugins=keyfile\n",
+            "etc/NetworkManager/system-connections/Ginkgo Corporate.nmconnection":
+                "[802-1x]\nclient-cert=/var/centrify/net/certs/auto_GinkgoComputerAuthenticationv2.crt\n"
+                "private-key=/var/centrify/net/certs/auto_GinkgoComputerAuthenticationv2.key\n"
+                "ca-cert=/usr/local/share/ca-certificates/GinkgoBioworks_Root_CA.crt\n",
+            "etc/NetworkManager/system-connections/Ginkgo Internet.nmconnection": "internet",
+            "etc/NetworkManager/system-connections/Ginkgo Visitor.nmconnection": "visitor",
+            "etc/NetworkManager/system-connections/Other.nmconnection": "other",
+            "var/centrify/net/certs/auto_GinkgoComputerAuthenticationv2.crt": "client certificate bytes",
+            "var/centrify/net/certs/auto_GinkgoComputerAuthenticationv2.key": "private key bytes",
+            "usr/local/share/ca-certificates/GinkgoBioworks_Root_CA.crt": "CA target bytes",
+            "etc/sudoers": "root ALL=(ALL:ALL) ALL\n",
+            "etc/sudoers.d/dotfiles-backup-stage": "payload",
+            "etc/sudoers.d/corporate-policy": "corporate policy",
+        }
+        for name, content in contents.items():
+            path = self.system / name
+            if "certs/auto_" in name or name.endswith("GinkgoBioworks_Root_CA.crt"):
+                target = self.file(path.with_name(path.name + ".target"), content)
+                path.symlink_to(target.name)
+            elif path != rule:
+                self.file(path, content)
+        for path in (self.system, *self.system.rglob("*")):
+            if path.is_dir():
+                path.chmod(0o755)
+        archive = self.stage / "protected-host-config.tar.gz"
+        manifest = self.stage / "protected-host-config.SHA256SUMS"
+
+        def stage(*args, euid=0):
+            with patch.object(system_update, "ROOT_UID", os.getuid()), \
+                    patch("os.geteuid", return_value=euid):
+                return self.cli("stage-protected", *args)
+
+        # Homes may use Ubuntu's default 0750 or the operator's existing 0755.
+        for mode in (0o700, 0o750, 0o755):
+            with self.subTest(home_mode=oct(mode)):
+                self.home.chmod(mode)
+                status, stdout, stderr = stage()
+                self.assertEqual(status, 0, stderr)
+                self.assertEqual(json.loads(stdout)["status"], "STAGED")
+        owner = self.home.stat()
+        for path in (archive, manifest):
+            info = path.stat()
+            self.assertEqual(stat.S_IMODE(info.st_mode), 0o600)
+            self.assertEqual((info.st_uid, info.st_gid), (owner.st_uid, owner.st_gid))
+        self.assertEqual(stat.S_IMODE(self.stage.stat().st_mode), 0o700)
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+        self.assertEqual(manifest.read_text().splitlines()[0],
+                         digest + "  protected-host-config.tar.gz")
+        with tarfile.open(archive, "r:gz") as bundle:
+            self.assertEqual(set(bundle.getnames()), set(contents))
+            for member in bundle.getmembers():
+                self.assertTrue(member.isfile(), member.name)
+                self.assertEqual(bundle.extractfile(member).read(), contents[member.name].encode())
+                self.assertIn("# source: " + member.name, manifest.read_text())
+        self.assertFalse(self.runner.calls, "Protected staging must not invoke sudo or rclone")
+        previous = archive.read_bytes()
+        previous_manifest = manifest.read_bytes()
+        self.assertEqual(stage(euid=12345)[0], 1)
+        self.assertEqual(archive.read_bytes(), previous)
+        key = self.system / "var/centrify/net/certs/auto_GinkgoComputerAuthenticationv2.key"
+        target = key.resolve()
+        saved_target = target.with_name(target.name + ".saved")
+        target.rename(saved_target)
+        self.assertEqual(stage()[0], 1)
+        self.assertEqual(archive.read_bytes(), previous)
+        self.assertEqual(manifest.read_bytes(), previous_manifest)
+        saved_target.rename(target)
+        archive.unlink()
+        manifest.unlink()
+
+        def rejected():
+            status, _, stderr = stage()
+            self.assertEqual(status, 1, stderr)
+            self.assertFalse(archive.exists())
+            self.assertFalse(manifest.exists())
+            self.assertFalse(list(self.stage.glob(".protected-*")))
+
+        # Every required fixed source must be present, including all cert targets.
+        for name in contents:
+            if name.endswith("Other.nmconnection") or name.endswith("corporate-policy"):
+                continue  # Additional profiles/policies are included when present.
+            path = self.system / name
+            saved = path.with_name(path.name + ".saved")
+            path.rename(saved)
+            with self.subTest(missing=name):
+                rejected()
+            saved.rename(path)
+        key.unlink()
+        key.symlink_to(self.file(self.root / "outside-system.key", "not an allowed target"))
+        rejected()
+        key.unlink()
+        key.symlink_to(target.name)
+        for path in (helper, rule):
+            with self.subTest(untrusted_install=str(path)):
+                mode = stat.S_IMODE(path.stat().st_mode)
+                path.chmod(0o777)
+                rejected()
+                path.chmod(mode)
+        with patch.object(system_update, "ROOT_UID", os.getuid() + 1), \
+                patch("os.geteuid", return_value=0):
+            self.assertEqual(self.cli("stage-protected")[0], 1)
+        for directory in (self.state, self.stage):
+            for mode in (0o750, 0o755):
+                with self.subTest(wrong_mode=str(directory), mode=oct(mode)):
+                    directory.chmod(mode)
+                    rejected()
+                    directory.chmod(0o700)
+        for directory in (self.home, self.state, self.stage):
+            with self.subTest(symlink=str(directory)):
+                saved = directory.with_name(directory.name + "-real")
+                directory.rename(saved)
+                directory.symlink_to(saved, target_is_directory=True)
+                rejected()
+                directory.unlink()
+                saved.rename(directory)
+        home_parent = self.root / "linked-home-parent"
+        home_parent.symlink_to(self.root, target_is_directory=True)
+        self.assertEqual(stage("--home", home_parent / self.home.name)[0], 1)
+        self.assertFalse(archive.exists())
+        self.assertFalse(manifest.exists())
+        home_parent.unlink()
+        # Symlinked ancestors below home must not bypass the directory checks.
+        parent = self.home / "state-parent"
+        parent.mkdir()
+        nested = parent / "state"
+        self.state.rename(nested)
+        parent.rename(self.home / "real-parent")
+        parent.symlink_to("real-parent", target_is_directory=True)
+        with patch.object(system_update, "ROOT_UID", os.getuid()), \
+                patch("os.geteuid", return_value=0):
+            self.assertEqual(self.cli("stage-protected", "--state-dir", nested)[0], 1)
+        parent.unlink()
+        (self.home / "real-parent/state").rename(self.state)
+        for path in (archive, manifest, self.system / "etc/NetworkManager/NetworkManager.conf"):
+            with self.subTest(symlink_file=str(path)):
+                saved = path.with_name(path.name + ".real")
+                existed = path.exists()
+                if existed:
+                    path.rename(saved)
+                else:
+                    self.file(saved, "must remain untouched")
+                path.symlink_to(saved.name)
+                status, _, _ = stage()
+                self.assertEqual(status, 1)
+                self.assertEqual(saved.read_text(), contents.get(
+                    str(path.relative_to(self.system)) if path.is_relative_to(self.system) else "",
+                    "must remain untouched"))
+                path.unlink()
+                if existed:
+                    saved.rename(path)
+                else:
+                    saved.unlink()
+        self.assertFalse(archive.exists())
+        self.assertFalse(manifest.exists())
+
+    def ubuntu_host(self):
+        names = (
+            "etc/os-release", "etc/apparmor.d/nix-userns", "etc/bash.bashrc",
+            "etc/tmpfiles.d/nix-opengl-driver.conf", "opt/.cisco/certificates/device.pem",
+            "opt/connectwisecontrol-test/ClientLaunchParameters.txt", "etc/centrifydc/centrifydc.conf",
+            "etc/apparmor.d/abstractions/centrifydc",
+            "etc/apparmor.d/abstractions/authentication.d/centrifydc",
+            "etc/apparmor.d/abstractions/nameservice.d/centrifydc", "etc/apparmor.d/local/custom",
+            "etc/sysctl.d/ipv6.conf", "etc/brave/policies/managed/extensions.json",
+            "etc/opt/chrome/policies/managed/extensions.json", "etc/apt/sources.list.d/vendor.sources",
+            "etc/apt/preferences.d/snapd", "etc/apt/keyrings/vendor.gpg",
+            "etc/apt/trusted.gpg.d/vendor.gpg", "usr/share/keyrings/oem-archive-keyring.gpg",
+            "usr/share/keyrings/google-chrome.gpg", "etc/fstab", "etc/crypttab",
+            "etc/default/grub", "etc/default/grub.d/custom.cfg", "etc/default/kdump-tools",
+            "etc/pam.d/common-auth", "etc/nsswitch.conf", "etc/ssh/sshd_config",
+            "etc/ssh/sshd_config.d/custom.conf", "etc/systemd/system/vpn.service.d/override.conf",
+        )
+        for name in names:
+            self.file(self.system / name, name + "\n")
+        (self.system / "etc/systemd/system/masked.service").symlink_to("/dev/null")
+        (self.system / "etc/systemd/system/multi-user.target.wants").mkdir()
+        (self.system / "etc/systemd/system/multi-user.target.wants/vpn.service").symlink_to("../vpn.service")
+        (self.home / ".nix-profile").symlink_to("/nix/var/nix/profiles/per-user/test/profile")
+        profiles = self.system / "nix/var/nix/profiles"
+        profiles.mkdir(parents=True)
+        (profiles / "default").symlink_to("default-1-link")
+        (profiles / "default-1-link").symlink_to("/nix/store/test-profile")
+        installer = self.file(self.home / ".vpn/installers/cisco-secure-client-linux64-5.1.18.314-predeploy-deb-k9.tgz")
+        installer.parent.chmod(0o700)
+        installer.chmod(0o600)
+        self.runner.protected_stage = self.stage
+        return names, installer
+
+    def test_stage_ubuntu_host_recovery_bundle_overlay_and_inventory(self):
+        names, installer = self.ubuntu_host()
+        self.ok("init")
+        for command in ("stage-corp-stack", "run"):
+            with self.subTest(command=command):
+                self.runner.calls.clear()
+                self.ok(command)
+                self.assertIn(["sudo", "-n", "/usr/local/sbin/dotfiles-backup-stage"], self.runner.calls)
+                self.assertEqual(stat.S_IMODE(self.stage.stat().st_mode), 0o700)
+                for name in names:
+                    self.assertEqual((self.stage / name).read_bytes(), (self.system / name).read_bytes())
+                for name in ("etc/systemd/system/masked.service",
+                             "etc/systemd/system/multi-user.target.wants/vpn.service",
+                             "opt/cisco/secureclient/lib/libvpn.so"):
+                    self.assertTrue((self.stage / name).is_symlink())
+                    self.assertEqual(os.readlink(self.stage / name), os.readlink(self.system / name))
+                for args, output in self.runner.inventory_outputs.items():
+                    self.assertIn(list(args), self.runner.calls)
+                inventory = self.stage / "host-inventory"
+                expected = {
+                    "packages.tsv": "libxml2\t1.0\tinstall ok installed\n",
+                    "package-selections.txt": "libxml2\tinstall\n",
+                    "manual-packages.txt": "libxml2\nlibwebkit2gtk-4.0-37\n",
+                    "held-packages.txt": "",
+                    "service-unit-files.txt": "vpnagentd.service enabled\n",
+                    "storage.json": '{"blockdevices": []}\n',
+                    "mounts.json": '{"filesystems": []}\n',
+                }
+                self.assertEqual({path.name for path in inventory.iterdir()},
+                                 set(expected) | {"nix-profile-references.txt"})
+                for name, output in expected.items():
+                    self.assertEqual((inventory / name).read_text(), output)
+                references = (inventory / "nix-profile-references.txt").read_text()
+                self.assertIn(str(self.home / ".nix-profile") + " -> /nix/var/nix/profiles/per-user/test/profile", references)
+                self.assertIn("default-1-link -> /nix/store/test-profile", references)
+                self.assertFalse(any(call[0] == "nix-env" for call in self.runner.calls))
+                archive = self.stage / "protected-host-config.tar.gz"
+                manifest = self.stage / "protected-host-config.SHA256SUMS"
+                for path in (archive, manifest, installer):
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+                self.assertEqual(manifest.read_text().splitlines()[0],
+                                 hashlib.sha256(archive.read_bytes()).hexdigest() + "  protected-host-config.tar.gz")
+                if command == "run":
+                    for path in (archive, manifest, inventory / "packages.tsv", installer):
+                        self.assertIn(str(path), self.runner.snapshot_files)
+
+        # Each failure must preserve every byte, mode and symlink in the last stage.
+        def stage_contents():
+            return {str(path.relative_to(self.stage)): (
+                stat.S_IMODE(path.lstat().st_mode),
+                os.readlink(path) if path.is_symlink() else path.read_bytes(),
+            ) for path in self.stage.rglob("*") if path.is_symlink() or path.is_file()}
+
+        previous = stage_contents()
+        for command in ("stage-corp-stack", "run"):
+            for failure in ("sudo", "digest", "inventory", "installer-mode", "installer-empty",
+                            "installer-missing", "installer-symlink", "etc/apparmor.d/nix-userns",
+                            "etc/bash.bashrc", "etc/tmpfiles.d/nix-opengl-driver.conf",
+                            "etc/ca-certificates.conf", "opt/cisco/secureclient/bin/vpnui"):
+                with self.subTest(command=command, failure=failure):
+                    self.runner.calls.clear()
+                    self.runner.fail_sudo = failure == "sudo"
+                    self.runner.corrupt_digest = failure == "digest"
+                    self.runner.fail_inventory = "dpkg-query" if failure == "inventory" else None
+                    removed = None
+                    saved = None
+                    if "/" in failure and not failure.startswith("installer"):
+                        removed = self.system / failure
+                    elif failure in ("installer-missing", "installer-symlink"):
+                        removed = installer
+                    if removed:
+                        saved = removed.with_name(removed.name + ".saved")
+                        removed.rename(saved)
+                        if failure == "installer-symlink":
+                            removed.symlink_to(saved.name)
+                    if failure == "installer-mode":
+                        installer.chmod(0o644)
+                    if failure == "installer-empty":
+                        installer.write_bytes(b"")
+                    try:
+                        status, stdout, stderr = self.cli(command)
+                        self.assertEqual(status, 1, stderr)
+                        self.assertNotIn("private sudo failure", stdout + stderr)
+                        self.assertEqual(stage_contents(), previous)
+                        self.assertEqual(self.restic_calls("backup"), [])
+                        self.assertEqual(self.rclone_calls("sync"), [])
+                        self.assertFalse(list(self.state.glob(".corp-*")))
+                        if command == "run":
+                            self.assertEqual(json.loads(self.report.read_text())["Snapshot Backup"]["status"], "UNVERIFIED")
+                    finally:
+                        self.runner.fail_sudo = False
+                        self.runner.corrupt_digest = False
+                        self.runner.fail_inventory = None
+                        if saved:
+                            if removed.is_symlink():
+                                removed.unlink()
+                            saved.rename(removed)
+                        installer.chmod(0o600)
+                        installer.write_text("payload")
+
+        # Ubuntu also ships os-release as a symlink; archive its target as well.
+        release = self.system / "etc/os-release"
+        release.unlink()
+        self.file(self.system / "usr/lib/os-release", "ID=ubuntu\n")
+        release.symlink_to("../usr/lib/os-release")
+        optional = self.file(self.system / "etc/centrifydc/private.conf", "not readable")
+        original_access = os.access
+
+        def access(path, mode):
+            return False if Path(path) == optional else original_access(path, mode)
+
+        with patch("os.access", side_effect=access):
+            self.ok("run")
+        self.assertFalse((self.stage / "etc/centrifydc/private.conf").exists())
+        self.assertEqual(os.readlink(self.stage / "etc/os-release"), "../usr/lib/os-release")
+        self.assertEqual((self.stage / "usr/lib/os-release").read_text(), "ID=ubuntu\n")
+        self.ok("verify")
+        (self.stage / "usr/lib/os-release").unlink()
+        status, stdout, stderr = self.cli("verify")
+        self.assertEqual(status, 1, stderr)
+        self.assertEqual(json.loads(stdout)["Snapshot Backup"]["status"], "UNVERIFIED")
+
+    def test_verify_enforces_staged_host_recovery_and_snapshot_stage_path(self):
+        _, installer = self.ubuntu_host()
+        self.ok("init")
+        self.ok("run")
+        self.runner.calls.clear()
+        self.ok("verify")
+        required = (
+            "protected-host-config.tar.gz", "protected-host-config.SHA256SUMS",
+            "etc/apparmor.d/nix-userns", "etc/bash.bashrc", "etc/tmpfiles.d/nix-opengl-driver.conf",
+            "etc/ca-certificates.conf", "opt/cisco/secureclient/bin/vpnui",
+            "usr/local/share/ca-certificates/Ginkgo_Root.crt",
+            "usr/local/share/ca-certificates/trust_custom.crt",
+            "host-inventory/packages.tsv", "host-inventory/package-selections.txt",
+            "host-inventory/manual-packages.txt", "host-inventory/held-packages.txt",
+            "host-inventory/service-unit-files.txt", "host-inventory/storage.json",
+            "host-inventory/mounts.json", "host-inventory/nix-profile-references.txt",
+        )
+
+        def unverified():
+            status, stdout, stderr = self.cli("verify")
+            self.assertEqual(status, 1, stderr)
+            report = json.loads(stdout)
+            self.assertEqual(report, json.loads(self.report.read_text()))
+            self.assertEqual(report["Snapshot Backup"]["status"], "UNVERIFIED")
+            self.assertNotIn("encrypted", report["Snapshot Backup"])
+            self.assertEqual(report["Browsable Sync"]["status"], "VERIFIED")
+
+        # Individual CA files may vary, but at least one certificate is required.
+        certs = self.stage / "usr/local/share/ca-certificates"
+        saved_certs = certs.with_name("saved-certs")
+        certs.rename(saved_certs)
+        unverified()
+        saved_certs.rename(certs)
+        for path in [self.stage / name for name in required if not name.endswith(".crt")] + [installer]:
+            with self.subTest(missing=str(path)):
+                self.ok("verify")
+                saved = path.with_name(path.name + ".saved")
+                path.rename(saved)
+                try:
+                    unverified()
+                finally:
+                    saved.rename(path)
+        for path in (self.stage / "protected-host-config.tar.gz",
+                     self.stage / "protected-host-config.SHA256SUMS", installer):
+            for failure in ("mode", "empty", "symlink", "corrupt"):
+                if path == installer and failure == "corrupt":
+                    continue  # The installer has no independent checksum manifest.
+                with self.subTest(path=str(path), failure=failure):
+                    self.ok("verify")
+                    original = path.read_bytes()
+                    saved = path.with_name(path.name + ".saved")
+                    try:
+                        if failure == "mode":
+                            path.chmod(0o644)
+                        elif failure == "symlink":
+                            path.rename(saved)
+                            path.symlink_to(saved.name)
+                        else:
+                            path.write_bytes(b"" if failure == "empty" else b"corrupt")
+                        unverified()
+                    finally:
+                        if path.is_symlink():
+                            path.unlink()
+                            saved.rename(path)
+                        path.write_bytes(original)
+                        path.chmod(0o600)
+        for name in ("packages.tsv", "manual-packages.txt", "nix-profile-references.txt"):
+            path = self.stage / "host-inventory" / name
+            original = path.read_text()
+            path.write_text("\n")
+            unverified()
+            path.write_text(original)
+        self.ok("verify")
+        paths = self.runner.snapshots[-1]["paths"]
+        paths.remove(str(self.stage))
+        unverified()
+        paths.append(str(self.stage))
+        self.ok("verify")
+        self.assertFalse(any(call[0] == "sudo" for call in self.runner.calls))
+
+    def test_expanded_user_space_snapshot_roots_and_gcloud_exclusions(self):
+        expanded = (
+            ".local/bin", ".config/monitors.xml", ".config/dconf", ".config/gh",
+            ".config/glab-cli", ".config/gcloud", ".docker/config.json", ".local/share/keyrings",
+        )
+        included = []
+        for name in expanded:
+            path = self.home / name
+            if name in (".config/monitors.xml", ".docker/config.json"):
+                included.append(self.file(path, name))
+            else:
+                included.append(self.file(path / "state", name))
+        (self.home / ".local/bin/launcher").symlink_to("state")
+        excluded = [self.file(self.home / ".config/gcloud" / name / "noise")
+                    for name in ("logs", "cache")]
+        self.ok("init")
+        result = self.ok("run")
+        for name in expanded:
+            self.assertIn(str(self.home / name), result["sources"])
+            self.assertIn(str(self.home / name), self.runner.snapshots[-1]["paths"])
+        for path in included:
+            self.assertIn(str(path), self.runner.snapshot_files)
+        self.assertTrue((self.home / ".local/bin/launcher").is_symlink())
+        for path in excluded:
+            self.assertNotIn(str(path), self.runner.snapshot_files)
+            self.assertIn(str(path.parent), self.runner.exclusion_text.splitlines())
 
     def test_ginkgo_roots_routed_to_restic_and_password_dir_excluded(self):
         from dotfiles_migrate import daily_backup
@@ -306,7 +773,7 @@ class TestDailyBackup(unittest.TestCase):
         self.ok("run")
         good_snapshots = [
             {"id": "old-snapshot"},
-            {"id": "latest-snapshot", "paths": [str(self.home / relative) for relative in GINKGO]},
+            {"id": "latest-snapshot", "paths": [str(self.home / relative) for relative in GINKGO] + [str(self.stage)]},
         ]
         self.runner.snapshots = good_snapshots
         self.runner.calls.clear()
@@ -338,8 +805,11 @@ class TestDailyBackup(unittest.TestCase):
             invalid_outputs.append(("snapshots", json.dumps([
                 good_snapshots[-1], {"id": "latest", "paths": [
                     str(self.home / root) for root in GINKGO if root != relative
-                ]},
+                ] + [str(self.stage)]},
             ])))
+        invalid_outputs.append(("snapshots", json.dumps([{
+            "id": "latest", "paths": [str(self.home / root) for root in GINKGO],
+        }])))
         invalid_outputs.extend((operation, "not JSON") for operation in ("cat", "key", "snapshots"))
         for operation, output in invalid_outputs:
             with self.subTest(operation=operation, output=output):
@@ -753,7 +1223,7 @@ class TestDailyBackup(unittest.TestCase):
             with self.subTest(failure=failure):
                 self.runner.fail_restic = "check" if failure == "check" else None
                 self.runner.snapshots = [] if failure == "empty-snapshots" else [{
-                    "id": "a" * 64, "paths": [str(self.home / relative) for relative in GINKGO],
+                    "id": "a" * 64, "paths": [str(self.home / relative) for relative in GINKGO] + [str(self.stage)],
                 }]
                 self.runner.fail_check = str(self.home / "personal") if failure == "browsable" else None
                 missing = self.home / "Documents"
