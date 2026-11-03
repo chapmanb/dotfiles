@@ -29,7 +29,7 @@ EXISTING_HOME_PACKAGES = {
 }
 AGENT_CONFIG_PACKAGES = {
     "bubblewrap", "gnupatch", "curl", "xdg-utils", "socat", "yt-dlp",
-    "gitleaks", "semgrep", "osv-scanner",
+    "gitleaks", "semgrep", "trivy",
 }
 PYTHON_MATRIX = {
     "python315", "(lib.setPrio 6 python314)", "(lib.setPrio 7 python313)",
