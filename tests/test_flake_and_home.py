@@ -24,7 +24,7 @@ EXISTING_HOME_PACKAGES = {
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "pkgs.unstable.harper",
     "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
-    "pre-commit", "pkgs.unstable.prek", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
+    "crane", "pre-commit", "pkgs.unstable.prek", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
 }
 AGENT_CONFIG_PACKAGES = {
@@ -505,6 +505,25 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertEqual(packages.group(1).split().count("mysql84"), 1)
         self.assertNotIn("mysql80", home)
         self.assertNotIn("perl", packages.group(1).split())
+
+    def test_gke_and_helm_plugins_are_declared_in_home(self):
+        home = (ROOT / "home/default.nix").read_text()
+        self.assertIn(
+            "google-cloud-sdk = pkgs.google-cloud-sdk.withExtraComponents [\n"
+            "    pkgs.google-cloud-sdk.components.gke-gcloud-auth-plugin\n"
+            "  ];",
+            home,
+        )
+        self.assertIn(
+            "kubernetes-helm = pkgs.wrapHelm pkgs.kubernetes-helm {\n"
+            "    plugins = [ pkgs.kubernetes-helmPlugins.helm-diff ];\n"
+            "  };",
+            home,
+        )
+        packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home)
+        self.assertIsNotNone(packages)
+        for pkg in ("google-cloud-sdk", "kubernetes-helm", "crane"):
+            self.assertEqual(packages.group(1).split().count(pkg), 1, pkg)
 
     def test_bashrc_retires_legacy_managers_and_dormant_nixos_reference(self):
         shell = (ROOT / "bashrc").read_text()

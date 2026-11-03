@@ -21,6 +21,12 @@ let
         --prefix PATH : "${pkgs.mysql84}/bin"
     '';
   };
+  google-cloud-sdk = pkgs.google-cloud-sdk.withExtraComponents [
+    pkgs.google-cloud-sdk.components.gke-gcloud-auth-plugin
+  ];
+  kubernetes-helm = pkgs.wrapHelm pkgs.kubernetes-helm {
+    plugins = [ pkgs.kubernetes-helmPlugins.helm-diff ];
+  };
 in {
   home.username = "bchapman";
   home.homeDirectory = "/home/bchapman";
@@ -38,7 +44,7 @@ in {
     keyringWithGar uv pixi bun deno pnpm
     brave libreoffice inkscape
     gh go-task glow lazygit gitu mdbook pandoc pkgs.unstable.harper clj-kondo clojure-lsp
-    kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk pre-commit pkgs.unstable.prek
+    kubectl kubernetes-helm k9s argo-workflows terraform terraform-docs google-cloud-sdk crane pre-commit pkgs.unstable.prek
     ffmpeg graphviz imagemagick qpdf sqlite ncdu parallel datamash tree fx jetbrains-mono
     bubblewrap gnupatch curl xdg-utils socat yt-dlp gitleaks semgrep trivy
     mysql84
