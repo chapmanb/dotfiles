@@ -37,12 +37,13 @@ SNAPSHOT_ROOTS = (
     ".local/bin", ".config/monitors.xml", ".config/dconf", ".config/gh",
     ".config/glab-cli", ".config/gcloud", ".docker/config.json", ".local/share/keyrings",
 )
-EXCLUDED_CODE_REPOS = frozenset({"acs-mirror-local", "hamilton-ultimate"})
+EXCLUDED_CODE_REPOS = frozenset({"acs-mirror-local", "ginkgo-mirror-local", "hamilton-ultimate"})
 PRIVATE_EXCLUSIONS = (
     ".dotfiles/tmp", ".codex/packages", ".pi/agent/npm", ".pi/agent/git",
     ".pi/agent/sessions", ".pi/agent/web-search-cache", ".cache", ".local/share/pnpm",
     ".bun", ".nvm", "bio", "ginkgo/guild", ".config/restic",
-    "ginkgo/code/acs-mirror-local", "ginkgo/code/hamilton-ultimate",
+    "ginkgo/code/acs-mirror-local", "ginkgo/code/ginkgo-mirror-local",
+    "ginkgo/code/hamilton-ultimate",
     ".config/gcloud/logs", ".config/gcloud/cache",
 )
 

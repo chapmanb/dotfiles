@@ -625,6 +625,7 @@ class TestFlakeAndHome(unittest.TestCase):
             root = Path(temporary)
             home = root / "home"
             (home / "ginkgo/code/acs-mirror").mkdir(parents=True)
+            (home / "ginkgo/code/ginkgo-software-mirror").mkdir(parents=True)
             (home / "ginkgo/code/acs-scheduler").mkdir(parents=True)
             bindir = root / "bin"
             bindir.mkdir()
@@ -669,6 +670,7 @@ class TestFlakeAndHome(unittest.TestCase):
             self.assertIn("system update failed", result.stderr)
             self.assertIn("agent skills update failed", result.stderr)
             self.assertIn("acs-mirror sync failed", result.stderr)
+            self.assertIn("ginkgo-software-mirror sync failed", result.stderr)
             self.assertIn("acs-scheduler pull failed", result.stderr)
             self.assertEqual(
                 log.read_text().splitlines(),
@@ -677,6 +679,7 @@ class TestFlakeAndHome(unittest.TestCase):
                     "system-update run --execute --confirm --nightly --allow-inactive-drivestrike",
                     "npx --yes skills update -g -y",
                     "uv run acs-mirror check",
+                    "uv run ginkgo-mirror check",
                     "git pull origin master",
                     "systemctl poweroff -i",
                 ],
@@ -698,6 +701,9 @@ class TestFlakeAndHome(unittest.TestCase):
                     "uv run acs-mirror check",
                     "uv run acs-mirror update",
                     "uv run acs-mirror sync",
+                    "uv run ginkgo-mirror check",
+                    "uv run ginkgo-mirror update",
+                    "uv run ginkgo-mirror sync",
                     "git pull origin master",
                 ],
             )

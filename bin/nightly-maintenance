@@ -8,6 +8,13 @@ sync_acs_mirror() {
         uv run acs-mirror sync
 }
 
+sync_ginkgo_software_mirror() {
+    cd "$HOME/ginkgo/code/ginkgo-software-mirror" &&
+        uv run ginkgo-mirror check &&
+        uv run ginkgo-mirror update &&
+        uv run ginkgo-mirror sync
+}
+
 pull_acs_scheduler() {
     cd "$HOME/ginkgo/code/acs-scheduler" &&
         git pull origin master
@@ -40,6 +47,11 @@ fi
 # Check, update, and sync acs-mirror (best-effort when off VPN)
 if ! sync_acs_mirror; then
     echo "nightly-maintenance: acs-mirror sync failed; continuing to remaining steps" >&2
+fi
+
+# Check, update, and sync ginkgo-software-mirror (best-effort when off VPN)
+if ! sync_ginkgo_software_mirror; then
+    echo "nightly-maintenance: ginkgo-software-mirror sync failed; continuing to remaining steps" >&2
 fi
 
 # Pull latest master in acs-scheduler (best-effort when off VPN)
