@@ -24,7 +24,7 @@ EXISTING_HOME_PACKAGES = {
     "gh", "go-task", "glow", "lazygit", "gitu", "mdbook", "pandoc", "pkgs.unstable.harper",
     "clj-kondo", "clojure-lsp",
     "kubectl", "kubernetes-helm", "k9s", "argo-workflows", "terraform", "terraform-docs", "google-cloud-sdk",
-    "crane", "pre-commit", "pkgs.unstable.prek", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
+    "crane", "pkgs.unstable.gcx", "pre-commit", "pkgs.unstable.prek", "ffmpeg", "graphviz", "imagemagick", "qpdf", "sqlite", "ncdu", "parallel",
     "datamash", "tree", "fx", "jetbrains-mono",
 }
 AGENT_CONFIG_PACKAGES = {
@@ -549,6 +549,7 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertNotIn("nodejs_24", overlay.group(1).split())
         self.assertNotIn("harper", overlay.group(1).split())
         self.assertNotIn("prek", overlay.group(1).split())
+        self.assertNotIn("gcx", overlay.group(1).split())
         home_module = (ROOT / "home/default.nix").read_text()
         packages = re.search(r"home\.packages = with pkgs;\s*\[([^]]+)\];", home_module)
         self.assertIsNotNone(packages)
@@ -560,6 +561,8 @@ class TestFlakeAndHome(unittest.TestCase):
         self.assertNotIn("harper", packages.group(1).split())
         self.assertIn("pkgs.unstable.prek", packages.group(1).split())
         self.assertNotIn("prek", packages.group(1).split())
+        self.assertIn("pkgs.unstable.gcx", packages.group(1).split())
+        self.assertNotIn("gcx", packages.group(1).split())
 
         with tempfile.TemporaryDirectory(prefix="test-shell-transition-") as temporary:
             home = Path(temporary)
